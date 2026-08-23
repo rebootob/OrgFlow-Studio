@@ -29,28 +29,28 @@ export async function generateA3OrganizationChartPDF(
   const fontOblique = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
 
   // Palette matching corporate reference
-  const cDark = rgb(0.1, 0.12, 0.15);
-  const cGray = rgb(0.42, 0.46, 0.52);
+  const cDark = rgb(0.08, 0.11, 0.15);
+  const cGray = rgb(0.38, 0.42, 0.48);
   const cLightGray = rgb(0.82, 0.85, 0.89);
-  const cLine = rgb(0.35, 0.38, 0.42);
+  const cLine = rgb(0.32, 0.35, 0.4);
 
   // Green Theme (M&E / Executive)
-  const cGreenBg = rgb(0.85, 0.94, 0.88);
-  const cGreenBorder = rgb(0.25, 0.62, 0.42);
+  const cGreenBg = rgb(0.86, 0.94, 0.89);
+  const cGreenBorder = rgb(0.22, 0.6, 0.4);
 
   // Orange/Beige Theme (GIFU SEIKI)
   const cOrangeBg = rgb(0.98, 0.93, 0.86);
-  const cOrangeBorder = rgb(0.85, 0.58, 0.35);
+  const cOrangeBorder = rgb(0.85, 0.56, 0.32);
 
-  // Blue / Neutral Theme
-  const cBlueHeader = rgb(0.25, 0.45, 0.75);
+  // Blue Theme
+  const cBlueHeader = rgb(0.2, 0.42, 0.72);
 
   // Vacancy Theme
   const cAmberBg = rgb(0.99, 0.94, 0.86);
   const cAmberBorder = rgb(0.85, 0.55, 0.15);
   const cAmberText = rgb(0.75, 0.35, 0.05);
 
-  // Maps for fast entity lookups
+  // Maps for dynamic entity lookups
   const asgMap = new Map<string, Assignment>();
   assignments.forEach(a => asgMap.set(a.positionId, a));
 
@@ -63,6 +63,13 @@ export async function generateA3OrganizationChartPDF(
     list.push(p);
     posByOrgMap.set(p.orgUnitCode, list);
   });
+
+  // Dynamic reconciliation assertion
+  const totalActiveEmployees = employees.length;
+  const totalAssignedPositions = assignments.length;
+  if (totalActiveEmployees === 0 && positions.length > 0 && totalAssignedPositions === 0) {
+    throw new Error('Print Validation Error: Total Active Staff cannot be 0 when positions exist');
+  }
 
   const versionNumber = options.versionNumber || 'Rev. 2 / 2026';
   const effectiveDate = options.effectiveDate || '5 May 2026';
@@ -104,17 +111,17 @@ export async function generateA3OrganizationChartPDF(
   // 1. OUTER BORDER
   // ---------------------------------------------------------------------------
   page.drawRectangle({
-    x: 15,
-    y: 15,
-    width: width - 30,
-    height: height - 30,
+    x: 14,
+    y: 14,
+    width: width - 28,
+    height: height - 28,
     borderWidth: 1.2,
     borderColor: cDark,
     color: rgb(1, 1, 1)
   });
 
   // ---------------------------------------------------------------------------
-  // 2. HEADER REGION
+  // 2. TOP HEADER REGION
   // ---------------------------------------------------------------------------
   // Top Left: Logo & BCP Box
   page.drawText('TTMET', { x: 25, y: height - 42, size: 15, font: fontBold, color: cBlueHeader });
@@ -176,13 +183,12 @@ export async function generateA3OrganizationChartPDF(
   // ---------------------------------------------------------------------------
   // 3. TREE ROOT CONNECTORS (PRESIDENT -> DIVISIONS)
   // ---------------------------------------------------------------------------
-  const presCenterX = presX + presW / 2;
+  const presCenterX = presX + presW / 2; // ~535
   const presBottomY = presY;
   const divBusY = 705;
 
   drawVLine(presCenterX, presBottomY, divBusY);
 
-  // Level 2 Division Centerpoints
   const div1CenterX = 304; // Machinery & Engineering
   const div2CenterX = 739; // GIFU SEIKI
   const div3CenterX = 1040; // Corporate Dept
@@ -190,7 +196,6 @@ export async function generateA3OrganizationChartPDF(
 
   drawHLine(div1CenterX, divFutureCenterX, divBusY);
 
-  // Drop lines to Level 2 nodes
   drawVLine(div1CenterX, divBusY, 675);
   drawVLine(div2CenterX, divBusY, 675);
   drawVLine(div3CenterX, divBusY, 675);
@@ -215,7 +220,7 @@ export async function generateA3OrganizationChartPDF(
   const d2H = 35;
   drawBox(d2X, d2Y, d2W, d2H, cOrangeBg, cOrangeBorder, 1);
   page.drawText('GIFU SEIKI Division', { x: d2X + 22, y: d2Y + 22, size: 7.5, font: fontBold, color: cOrangeBorder });
-  page.drawText('Mr. Uchida - Vice President', { x: d2X + 15, y: d2Y + 9, size: 7, font: fontBold, color: cDark });
+  page.drawText('Mr. Takayoshi Uchida - VP', { x: d2X + 16, y: d2Y + 9, size: 7, font: fontBold, color: cDark });
 
   // 4C. Corporate Department (TMH0)
   const d3X = div3CenterX - 50;
@@ -276,9 +281,9 @@ export async function generateA3OrganizationChartPDF(
   const tmg0X = div2CenterX - tmg0W / 2;
   drawBox(tmg0X, 560, tmg0W, 35, cOrangeBg, cOrangeBorder, 0.8);
   page.drawText('Mold & Engineering Department (TMG0)', { x: tmg0X + 28, y: 584, size: 7, font: fontBold, color: cOrangeBorder });
-  page.drawText('Mr. Uchida (GM) - Mr. Hanamura (Factory Mgr)', { x: tmg0X + 25, y: 571, size: 6, font: fontRegular, color: cDark });
+  page.drawText('Mr. Takayoshi Uchida (GM) - Mr. Hanamura (Factory Mgr)', { x: tmg0X + 12, y: 571, size: 5.5, font: fontRegular, color: cDark });
 
-  // Functional DGM placeholder row beneath TMG0
+  // Functional Group DGM row beneath TMG0
   const fDgmY = 530;
   drawVLine(div2CenterX, 560, fDgmY + 22);
   const gFuncs = ['Admin', 'CAD', 'Marketing', 'Production'];
@@ -299,31 +304,101 @@ export async function generateA3OrganizationChartPDF(
   const secY = 475;
   const secH = 36;
 
-  // 12 Exact Columns across the canvas with guaranteed zero margin overflow
+  // 12 Proportional columns across the A3 canvas
   const sections = [
     // Under TMT0
-    { parentCenterX: tmt0CenterX, code: 'TMT1', name: 'Export', head: 'Mr. Pitchayadol (Mgr)', x: 25, w: 70, theme: 'green' },
-    { parentCenterX: tmt0CenterX, code: 'TMT2', name: 'Toyota Sales', head: 'Ms. Darat (Acting)', x: 99, w: 70, theme: 'green' },
+    {
+      parentCenterX: tmt0CenterX, code: 'TMT1', name: 'Export', head: 'Mr. Pitchayadol (Mgr)', x: 25, w: 70, theme: 'green',
+      subteams: [
+        { name: 'Machine & Equipments', lead: 'Mr. Athasit', chief: 'Ms. Narisara' },
+        { name: 'Tool Part & Project', lead: 'Mr. Krisana', chief: 'Ms. Laksami' }
+      ]
+    },
+    {
+      parentCenterX: tmt0CenterX, code: 'TMT2', name: 'Toyota Sales', head: 'Ms. Darat (Acting)', x: 99, w: 70, theme: 'green',
+      subteams: [
+        { name: 'Toyota', lead: 'Ms. Phitchakorn', chief: 'Mr. Nuttanan' },
+        { name: 'STM', lead: 'Mr. Somphort', chief: 'Ms. Salisa' },
+        { name: 'Logistics', lead: 'Ms. Rossarin', chief: 'Mr. Narakorn' }
+      ]
+    },
 
     // Under TMF0
-    { parentCenterX: tmf0CenterX, code: 'TMF1', name: 'Automotive', head: 'Mr. Kritsada (Mgr)', x: 173, w: 70, theme: 'green' },
-    { parentCenterX: tmf0CenterX, code: 'TMF2', name: 'Industry', head: 'Ms. Vassana (Mgr)', x: 247, w: 70, theme: 'green' },
-    { parentCenterX: tmf0CenterX, code: 'TMF3', name: 'Sales Eng.', head: 'Mr. Worapat (Mgr)', x: 321, w: 70, theme: 'green' },
+    {
+      parentCenterX: tmf0CenterX, code: 'TMF1', name: 'Automotive', head: 'Mr. Kritsada (Mgr)', x: 173, w: 70, theme: 'green',
+      subteams: [
+        { name: 'Automotive Team', lead: 'Mr. Kritsada', chief: 'Mr. Pawee' }
+      ]
+    },
+    {
+      parentCenterX: tmf0CenterX, code: 'TMF2', name: 'Industry', head: 'Ms. Vassana (Mgr)', x: 247, w: 70, theme: 'green',
+      subteams: [
+        { name: 'Industry Team', lead: 'Ms. Vassana', chief: 'Ms. Chuleeporn' }
+      ]
+    },
+    {
+      parentCenterX: tmf0CenterX, code: 'TMF3', name: 'Sales Eng.', head: 'Mr. Worapat (Mgr)', x: 321, w: 70, theme: 'green',
+      subteams: [
+        { name: 'Denso Team', lead: 'Mr. Worapat', chief: 'Mr. Sira' }
+      ]
+    },
 
     // Under TME0
-    { parentCenterX: tme0CenterX, code: 'TME1', name: 'Eco Energy & Tex', head: 'Mr. Suthas (Mgr)', x: 395, w: 74, theme: 'green' },
+    {
+      parentCenterX: tme0CenterX, code: 'TME1', name: 'Eco Energy & Tex', head: 'Mr. Suthas (Mgr)', x: 395, w: 74, theme: 'green',
+      subteams: [
+        { name: 'Marketing (Eco)', lead: 'Mr. Suthas', chief: 'Mr. Gritchai' }
+      ]
+    },
 
     // Under TMS0
-    { parentCenterX: tms0CenterX, code: 'TMS1', name: 'Tech Services', head: 'Mr. Satit (Senior Mgr)', x: 473, w: 74, theme: 'green' },
+    {
+      parentCenterX: tms0CenterX, code: 'TMS1', name: 'Tech Services', head: 'Mr. Satit (Senior Mgr)', x: 473, w: 74, theme: 'green',
+      subteams: [
+        { name: 'Project Team', lead: 'Mr. Surat', chief: 'Mr. Sarunyoo' },
+        { name: 'Engineering', lead: 'Mr. Narong', chief: 'Mr. Peranut' },
+        { name: 'Safety Team', lead: 'Mr. Noppanan', chief: 'Ms. Penpichar' }
+      ]
+    },
 
-    // Under TMG0
-    { parentCenterX: div2CenterX, code: 'TMG1', name: 'Die Casting', head: 'Ms. Amporn (Mgr)', x: 555, w: 180, theme: 'orange' },
-    { parentCenterX: div2CenterX, code: 'TMG2', name: 'Injection', head: 'Mr. Pitinon (Acting Mgr)', x: 743, w: 180, theme: 'orange' },
+    // Under TMG0 (Die Casting & Injection with Deep Functional Branches)
+    {
+      parentCenterX: div2CenterX, code: 'TMG1', name: 'Die Casting', head: 'Ms. Amporn (Mgr)', x: 555, w: 180, theme: 'orange',
+      subteams: [
+        { name: 'Admin (ACC. HR&GA)', lead: 'Ms. Wannapa', chief: 'Ms. Kanjana' },
+        { name: 'CAD Team', lead: 'Mr. Watcharin (Chief)', chief: 'CAD Staff' },
+        { name: 'Marketing Team', lead: 'Ms. Natta (Chief)', chief: 'Mr. Pengtawan' },
+        { name: 'Production (PC/PUR & CAM)', lead: 'Mr. Prompan (Mgr)', chief: 'QC/QA Staff' }
+      ]
+    },
+    {
+      parentCenterX: div2CenterX, code: 'TMG2', name: 'Injection', head: 'Mr. Pitinon (Acting Mgr)', x: 743, w: 180, theme: 'orange',
+      subteams: [
+        { name: 'Production (CAM/PUR)', lead: 'Mr. Pitinon', chief: 'Machine/Finishing' },
+        { name: 'CAD Team', lead: 'Mr. Phubodin', chief: 'CAD Specialist' },
+        { name: 'Marketing Team', lead: 'Ms. Natta', chief: 'Marketing Lead' }
+      ]
+    },
 
-    // Under TMH0
-    { parentCenterX: div3CenterX, code: 'TMH1', name: 'GA Section', head: 'Ms. Supparat (Mgr)', x: 932, w: 68, theme: 'green' },
-    { parentCenterX: div3CenterX, code: 'TMH2', name: 'HR & Personnel', head: 'Ms. Papatchaya (Mgr)', x: 1006, w: 68, theme: 'green' },
-    { parentCenterX: div3CenterX, code: 'TMH3', name: 'Accounting & Fin', head: 'Ms. Chatrawee (Mgr)', x: 1080, w: 68, theme: 'green' }
+    // Under TMH0 (Corporate Sections)
+    {
+      parentCenterX: div3CenterX, code: 'TMH1', name: 'GA Section', head: 'Ms. Supparat (Mgr)', x: 932, w: 68, theme: 'green',
+      subteams: [
+        { name: 'General Affairs', lead: 'Ms. Supparat', chief: 'Mr. Chitchaiya' }
+      ]
+    },
+    {
+      parentCenterX: div3CenterX, code: 'TMH2', name: 'HR & Personnel', head: 'Ms. Papatchaya (Mgr)', x: 1006, w: 68, theme: 'green',
+      subteams: [
+        { name: 'HR & Recruitment', lead: 'Mrs. Pattanarat', chief: 'HR Staff' }
+      ]
+    },
+    {
+      parentCenterX: div3CenterX, code: 'TMH3', name: 'Accounting & Fin', head: 'Ms. Chatrawee (Mgr)', x: 1080, w: 68, theme: 'green',
+      subteams: [
+        { name: 'Finance & ACC', lead: 'Mrs. Nirada (Chief)', chief: 'Ms. Thanthip' }
+      ]
+    }
   ];
 
   // Group by parent to draw clean branch lines
@@ -357,7 +432,7 @@ export async function generateA3OrganizationChartPDF(
   });
 
   // ---------------------------------------------------------------------------
-  // 7. LEVEL 5: POSITION & EMPLOYEE BOXES (HIERARCHICAL COLUMN DETAILS)
+  // 7. LEVEL 5 & 6: SUB-TEAMS & POSITION / EMPLOYEE BOXES (RICH VERTICAL USE)
   // ---------------------------------------------------------------------------
   sections.forEach(s => {
     const sCenter = s.x + s.w / 2;
@@ -369,14 +444,30 @@ export async function generateA3OrganizationChartPDF(
 
     let cardY = dropStartY - 8;
     const cardW = s.w;
-    const cardH = 22;
 
-    orgPositions.slice(0, 6).forEach((pos, idx) => {
+    // Render Sub-Team grouping cards first (if available)
+    if (s.subteams && s.subteams.length > 0) {
+      const subteamH = 26;
+      s.subteams.forEach((st, stIdx) => {
+        cardY -= (subteamH + 4);
+        drawBox(s.x, cardY, cardW, subteamH, rgb(0.99, 1, 0.99), cLightGray, 0.5);
+        page.drawText(st.name, { x: s.x + 3, y: cardY + 16, size: 4.8, font: fontBold, color: cDark });
+        page.drawText(`Lead: ${st.lead} • ${st.chief}`, { x: s.x + 3, y: cardY + 6, size: 4.2, font: fontRegular, color: cGray });
+
+        if (stIdx > 0) {
+          drawVLine(sCenter, cardY + subteamH + 4, cardY + subteamH, cLightGray, 0.4);
+        }
+      });
+    }
+
+    // Render individual Position & Incumbent Employee Cards beneath
+    const cardH = 22;
+    orgPositions.slice(0, 7).forEach((pos, idx) => {
       const asg = asgMap.get(pos.id);
       const emp = asg ? empMap.get(asg.employeeId) : null;
       const isVacant = pos.lifecycle === 'VACANT' || !emp;
 
-      cardY -= (cardH + 4);
+      cardY -= (cardH + 3.5);
 
       if (isVacant) {
         drawBox(s.x, cardY, cardW, cardH, cAmberBg, cAmberBorder, 0.75);
@@ -385,16 +476,18 @@ export async function generateA3OrganizationChartPDF(
       } else {
         drawBox(s.x, cardY, cardW, cardH, rgb(1, 1, 1), cLightGray, 0.55);
         page.drawText(pos.title, { x: s.x + 3, y: cardY + 13, size: 5, font: fontBold, color: cDark });
-        page.drawText(emp ? emp.nameEN : 'Staff Incumbent', { x: s.x + 3, y: cardY + 4, size: 4.5, font: fontRegular, color: cGray });
+        // Real employee name dynamically bound from active Employee record
+        const empName = emp ? emp.nameEN : 'Staff Incumbent';
+        page.drawText(empName, { x: s.x + 3, y: cardY + 4, size: 4.5, font: fontRegular, color: cGray });
       }
 
       if (idx > 0) {
-        drawVLine(sCenter, cardY + cardH + 4, cardY + cardH, cLightGray, 0.5);
+        drawVLine(sCenter, cardY + cardH + 3.5, cardY + cardH, cLightGray, 0.4);
       }
     });
 
-    if (orgPositions.length > 6) {
-      page.drawText(`+ ${orgPositions.length - 6} more staff`, {
+    if (orgPositions.length > 7) {
+      page.drawText(`+ ${orgPositions.length - 7} more roster positions`, {
         x: s.x + 2,
         y: cardY - 7,
         size: 4.5,

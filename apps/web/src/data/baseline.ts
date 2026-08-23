@@ -1,4 +1,4 @@
-﻿import { RawLegacyOrgRecord, RawLegacyEmployeeRecord } from '@orgflow/domain';
+import { RawLegacyOrgRecord, RawLegacyEmployeeRecord } from '@orgflow/domain';
 
 export const CANONICAL_57_MASTER: RawLegacyOrgRecord[] = [
   { code: "TTMET", name: "Toyota Tsusho M&E (Thailand) Co.,Ltd.", type: "COMPANY", level: 1, parentCode: null },
@@ -61,33 +61,114 @@ export const CANONICAL_57_MASTER: RawLegacyOrgRecord[] = [
 ];
 
 export function generate275EmployeesFixture(): RawLegacyEmployeeRecord[] {
-  const titles = [
-    'President', 'Vice President', 'General Manager', 'Assistant General Manager',
-    'Department Manager', 'Section Manager', 'Assistant Section Manager',
-    'Senior Engineer', 'Engineer', 'Officer', 'Senior Officer', 'Technician', 'Specialist'
+  const authenticNamedStaff: { org: string; title: string; en: string; th: string }[] = [
+    { org: 'TTMET', title: 'President', en: 'Mr. Takeshi Tsuchihira', th: 'นายทาเคชิ สึจิฮิระ' },
+    { org: 'DIV-ME', title: 'Vice President', en: 'Ms. Somrudee', th: 'น.ส.สมฤดี' },
+    { org: 'DIV-G0', title: 'Vice President', en: 'Mr. Takayoshi Uchida', th: 'นายทาคายาชิ อูชิดะ' },
+    { org: 'TMH0', title: 'General Manager', en: 'Ms. Chvitsara', th: 'น.ส.ชวิศรา' },
+    { org: 'TMT0', title: 'Deputy General Manager', en: 'Mr. Weerakul', th: 'นายวีระกุล' },
+    { org: 'TMT0', title: 'Deputy General Manager', en: 'Ms. Darat', th: 'น.ส.ดารัตน์' },
+    { org: 'TMF0', title: 'General Manager', en: 'Mr. Kito', th: 'นายคิโตะ' },
+    { org: 'TMF0', title: 'Deputy General Manager', en: 'Ms. Vassana', th: 'น.ส.วาสนา' },
+    { org: 'TME0', title: 'General Manager (Acting)', en: 'Ms. Somrudee', th: 'น.ส.สมฤดี' },
+    { org: 'TMS0', title: 'General Manager', en: 'Mr. Makino', th: 'นายมาคิโนะ' },
+    { org: 'TMG0', title: 'General Manager (Acting)', en: 'Mr. Takayoshi Uchida', th: 'นายทาคายาชิ อูชิดะ' },
+    { org: 'TMG0', title: 'Factory Manager', en: 'Mr. Hanamura', th: 'นายฮานามูระ' },
+    { org: 'TMT1', title: 'Manager', en: 'Mr. Pitchayadol', th: 'นายพิชญดล' },
+    { org: 'TMT2', title: 'Manager (Acting)', en: 'Ms. Darat', th: 'น.ส.ดารัตน์' },
+    { org: 'TMF1', title: 'Manager', en: 'Mr. Kritsada', th: 'นายกฤษดา' },
+    { org: 'TMF2', title: 'Manager', en: 'Ms. Vassana', th: 'น.ส.วาสนา' },
+    { org: 'TMF3', title: 'Manager', en: 'Mr. Worapat', th: 'นายวรพัทธ์' },
+    { org: 'TME1', title: 'Manager', en: 'Mr. Suthas', th: 'นายสุทัศน์' },
+    { org: 'TMS1', title: 'Senior Manager', en: 'Mr. Satit', th: 'นายสาธิต' },
+    { org: 'TMG1', title: 'Manager', en: 'Ms. Amporn', th: 'น.ส.อัมพร' },
+    { org: 'TMG2', title: 'Manager (Acting)', en: 'Mr. Pitinon', th: 'นายปิตินันท์' },
+    { org: 'TMH1', title: 'Manager', en: 'Ms. Supparat', th: 'น.ส.ศุภรัตน์' },
+    { org: 'TMH2', title: 'Manager', en: 'Ms. Papatchaya', th: 'น.ส.ปภัสชญา' },
+    { org: 'TMH2', title: 'Assistant Manager', en: 'Mrs. Pattanarat', th: 'นางพัฒนรัตน์' },
+    { org: 'TMH3', title: 'Manager', en: 'Ms. Chatrawee', th: 'น.ส.ฉัตรวีร์' },
+    { org: 'TMH3', title: 'Chief', en: 'Mrs. Nirada', th: 'นางนิรดา' },
+    { org: 'TMG1-CAD', title: 'Chief Engineer', en: 'Mr. Watcharin', th: 'นายวัชรินทร์' },
+    { org: 'TMG1-MKT', title: 'Chief Marketing', en: 'Ms. Natta', th: 'น.ส.ณัฐา' },
+    { org: 'TMG1-PRD', title: 'Chief Production', en: 'Mr. Prompan', th: 'นายพร้อมพรรณ' },
+    { org: 'TMG2-CAD', title: 'Chief Engineer', en: 'Mr. Phubodin', th: 'นายภูบดินทร์' },
+    { org: 'TMT1-MACH', title: 'Assistant Manager', en: 'Mr. Athasit', th: 'นายอรรถสิทธิ์' },
+    { org: 'TMT1-MACH', title: 'Chief', en: 'Ms. Narisara', th: 'น.ส.นริศรา' },
+    { org: 'TMT1-TRIAL', title: 'Assistant Manager', en: 'Mr. Krisana', th: 'นายกฤษณะ' },
+    { org: 'TMT1-TRIAL', title: 'Chief', en: 'Ms. Laksami', th: 'น.ส.ลักษมี' },
+    { org: 'TMT2-TOYOTA', title: 'Assistant Manager', en: 'Ms. Phitchakorn', th: 'น.ส.พิชญาภา' },
+    { org: 'TMT2-STM', title: 'Assistant Manager', en: 'Mr. Somphort', th: 'นายสมพร' },
+    { org: 'TMS1-PROJ', title: 'Assistant Manager', en: 'Mr. Surat', th: 'นายสุรัตน์' },
+    { org: 'TMS1-ENGI', title: 'Assistant Manager', en: 'Mr. Narong', th: 'นายณรงค์' },
+    { org: 'TMS1-SAFE', title: 'Assistant Manager', en: 'Mr. Noppanan', th: 'นายนพอนันต์' },
+    { org: 'TMS1-SAFE', title: 'Safety Officer', en: 'Ms. Penpichar', th: 'น.ส.เพ็ญพิชชา' }
+  ];
+
+  const genericTitles = [
+    'Assistant Manager', 'Senior Engineer', 'Engineer', 'Chief',
+    'Senior Officer', 'Officer', 'Technician', 'Specialist', 'Operator'
+  ];
+
+  const thaiSurnames = [
+    'Suksomboon', 'Rattanakul', 'Prasertsilp', 'Wongsuwan', 'Chaiprasert',
+    'Boonchuay', 'Srisuk', 'Phathanakul', 'Thongdee', 'Sakulpipat',
+    'Kiatpanich', 'Siriporn', 'Maneerat', 'Ruangroj', 'Vichaidit'
+  ];
+
+  const thaiFirstnames = [
+    'Somchai', 'Somsak', 'Kamonwan', 'Anong', 'Phitcha', 'Thanawat',
+    'Nattaporn', 'Warunee', 'Preecha', 'Suriya', 'Chonlada', 'Pattara',
+    'Nutthapon', 'Pattama', 'Watcharaporn', 'Kittisak', 'Anucha', 'Supaporn'
   ];
 
   const orgUnits = CANONICAL_57_MASTER;
   const employees: RawLegacyEmployeeRecord[] = [];
 
-  for (let i = 1; i <= 275; i++) {
-    const orgIndex = i % orgUnits.length;
-    const org = orgUnits[orgIndex];
+  // Populate first 40 with authentic reference roster
+  authenticNamedStaff.forEach((st, idx) => {
+    const i = idx + 1;
     const empCode = `EMP-${String(i).padStart(3, '0')}`;
-    const title = titles[i % titles.length];
+    const org = orgUnits.find(o => o.code === st.org) || orgUnits[0];
 
     employees.push({
       $id: { value: String(i) },
       emp_text: { value: empCode },
-      Text_0: { value: `พนักงานทดสอบ ${i}` },
-      Text: { value: `Employee Staff ${i}` },
-      Text_1: { value: `Staff${i}` },
+      Text_0: { value: st.th },
+      Text: { value: st.en },
+      Text_1: { value: st.en.replace(/^M[rs]\.?\s+/, '') },
+      Drop_down_0: { value: org.code },
+      Drop_down_1: { value: org.parentCode || '' },
+      Drop_down_2: { value: org.name },
+      Text_2: { value: st.title },
+      Status: { value: 'Active' },
+      Radio_button: { value: org.code.startsWith('TMH') || org.code.startsWith('TMT') ? 'BKK' : 'AMT' }
+    });
+  });
+
+  // Populate remaining to reach 275 total normalized records
+  for (let i = authenticNamedStaff.length + 1; i <= 275; i++) {
+    const orgIndex = i % orgUnits.length;
+    const org = orgUnits[orgIndex];
+    const empCode = `EMP-${String(i).padStart(3, '0')}`;
+    const title = genericTitles[i % genericTitles.length];
+    const fname = thaiFirstnames[i % thaiFirstnames.length];
+    const sname = thaiSurnames[i % thaiSurnames.length];
+    const prefix = (i % 2 === 0) ? 'Mr.' : 'Ms.';
+    const fullNameEN = `${prefix} ${fname} ${sname.charAt(0)}.`;
+    const fullNameTH = `${prefix === 'Mr.' ? 'นาย' : 'น.ส.'}${fname}`;
+
+    employees.push({
+      $id: { value: String(i) },
+      emp_text: { value: empCode },
+      Text_0: { value: fullNameTH },
+      Text: { value: fullNameEN },
+      Text_1: { value: fname },
       Drop_down_0: { value: org.code },
       Drop_down_1: { value: org.parentCode || '' },
       Drop_down_2: { value: org.name },
       Text_2: { value: title },
       Status: { value: 'Active' },
-      Radio_button: { value: i % 2 === 0 ? 'BKK' : 'AMT' }
+      Radio_button: { value: org.code.startsWith('TMH') || org.code.startsWith('TMT') ? 'BKK' : 'AMT' }
     });
   }
 

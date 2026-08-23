@@ -13,7 +13,6 @@ async function renderPdfPageToPng(pdfPath: string, outPngPath: string, scale: nu
   const canvas = createCanvas(viewport.width, viewport.height);
   const ctx = canvas.getContext('2d');
 
-  // Fill white background
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, viewport.width, viewport.height);
 
@@ -41,21 +40,21 @@ async function main() {
   const refPng = path.join(compDir, 'reference.png');
   const genPng = path.join(compDir, 'generated.png');
   const sideBySidePng = path.join(compDir, 'side_by_side.png');
+  const overlayPng = path.join(compDir, 'overlay.png');
 
   console.log('Rendering reference PDF page...');
-  const refMeta = await renderPdfPageToPng(refPdf, refPng, 1.5);
+  await renderPdfPageToPng(refPdf, refPng, 1.5);
 
   console.log('Rendering generated PDF page...');
-  const genMeta = await renderPdfPageToPng(genPdf, genPng, 1.5);
+  await renderPdfPageToPng(genPdf, genPng, 1.5);
 
-  // Resize both to identical width & height for side-by-side
   const targetW = 1200;
   const targetH = Math.round((842.4 / 1191.6) * 1200); // ~848
 
   const refResized = await sharp(refPng).resize(targetW, targetH).toBuffer();
   const genResized = await sharp(genPng).resize(targetW, targetH).toBuffer();
 
-  // Create side-by-side composite: width = 2400 + 40 padding
+  // 1. Side-by-Side Comparison
   await sharp({
     create: {
       width: targetW * 2 + 40,
@@ -72,6 +71,18 @@ async function main() {
     .toFile(sideBySidePng);
 
   console.log(`[SUCCESS] Side-by-side visual comparison generated at:\n${sideBySidePng}`);
+
+  // 2. Semi-Transparent Overlay Comparison (50% opacity blend)
+  const genSemiTransparent = await sharp(genResized)
+    .ensureAlpha(0.5)
+    .toBuffer();
+
+  await sharp(refResized)
+    .composite([{ input: genSemiTransparent, blend: 'over' }])
+    .png()
+    .toFile(overlayPng);
+
+  console.log(`[SUCCESS] Overlay visual comparison generated at:\n${overlayPng}`);
 }
 
 main().catch(err => {
