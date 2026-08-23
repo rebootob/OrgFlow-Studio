@@ -6,8 +6,11 @@ import {
   Assignment,
   Employee,
   OrganizationSnapshot,
+  ChangeOperation,
   DiffReport,
   validateOrganizationIntegrity,
+  canReparentOrgUnit,
+  canCloseOrgUnit,
   computeVersionDiff,
   detectCircularReporting,
   buildNormalizedDataset
@@ -15,7 +18,8 @@ import {
 import { CANONICAL_57_MASTER, generate275EmployeesFixture } from '../data/baseline.js';
 
 export interface OrgStoreState {
-  viewMode: 'CURRENT_OFFICIAL' | 'STUDIO_DRAFT';
+  viewMode: 'CURRENT_OFFICIAL' | 'DRAFT';
+  draftName: string;
   planName: string;
   currentVersionName: string;
   effectiveDate: string;
@@ -26,22 +30,37 @@ export interface OrgStoreState {
     treeHash: string;
   } | null;
 
-  currentRootOrgCode: string | null; // null = entire company
+  currentRootOrgCode: string | null;
 
+  // Working State (Active view on Canvas)
   orgUnits: OrgUnit[];
   positions: Position[];
   assignments: Assignment[];
   employees: Employee[];
 
+  // Official Baseline Cache (for switching back and forth)
+  officialBaseline: {
+    orgUnits: OrgUnit[];
+    positions: Position[];
+    assignments: Assignment[];
+    employees: Employee[];
+  } | null;
+
+  // Change Log & Operations
+  changeOperations: ChangeOperation[];
+  autosaveStatus: 'SAVED' | 'SAVING' | 'UNSAVED';
+
   undoStack: Array<{
     orgUnits: OrgUnit[];
     positions: Position[];
     assignments: Assignment[];
+    changeOperations: ChangeOperation[];
   }>;
   redoStack: Array<{
     orgUnits: OrgUnit[];
     positions: Position[];
     assignments: Assignment[];
+    changeOperations: ChangeOperation[];
   }>;
 
   versions: Map<string, OrganizationSnapshot>;
@@ -53,44 +72,65 @@ export interface OrgStoreState {
   searchQuery: string;
   validationResult: { valid: boolean; errors: string[]; warnings: string[] };
 
+  // Actions
   initializeCurrentOrganization: () => Promise<void>;
+  createDraft: (customName?: string) => void;
+  switchToCurrent: () => void;
+  switchToDraft: () => void;
+
   drillDownToOrg: (orgCode: string) => void;
   drillUpToParent: () => void;
   resetDrillDownToRoot: () => void;
   getBreadcrumbTrail: () => Array<{ code: string; name: string }>;
   getRollupStats: (orgCode: string) => { totalHeadcount: number; totalPositions: number; childUnitCount: number };
 
-  moveEmployee: (employeeId: string, targetPositionId: string) => boolean;
+  // Domain Commands
+  moveOrgUnit: (unitCode: string, newParentCode: string) => { success: boolean; error?: string };
+  addOrgUnit: (data: { name: string; code: string; type: string; parentCode: string }) => { success: boolean; error?: string };
+  closeOrgUnit: (unitCode: string, effectiveDate: string, reason?: string) => { success: boolean; error?: string };
+  removeDraftUnit: (unitCode: string) => { success: boolean; error?: string };
+
   movePosition: (positionId: string, targetOrgUnitCode: string, newReportsToId?: string | null) => boolean;
-  createPosition: (orgUnitCode: string, title: string) => Position;
+  addPosition: (data: { orgUnitCode: string; title: string; code?: string }) => Position;
+  closePosition: (positionId: string) => void;
   vacatePosition: (positionId: string) => void;
+
+  moveEmployee: (employeeId: string, targetPositionId: string) => boolean;
+
   undo: () => void;
   redo: () => void;
   saveNamedVersion: (versionNumber: string) => OrganizationSnapshot;
   loadVersionSnapshot: (versionNumber: string) => void;
   compareWithVersion: (versionNumber: string) => DiffReport | null;
+
   setSearchQuery: (query: string) => void;
   setSelectedOrgCode: (code: string | null) => void;
   setSelectedPositionId: (id: string | null) => void;
   runValidation: () => void;
-  persistToLocalStorage: () => void;
-  restoreFromLocalStorage: () => boolean;
+  persistDraftToLocalStorage: () => void;
+  restoreDraftFromLocalStorage: () => boolean;
 }
 
-const STORAGE_KEY = 'orgflow_studio_draft_v1';
+const DRAFT_STORAGE_KEY = 'orgflow_studio_working_draft_v1';
 
 export const useOrgStore = create<OrgStoreState>()(
   immer((set, get) => ({
     viewMode: 'CURRENT_OFFICIAL',
+    draftName: 'FY2027 Organization Plan',
     planName: 'Official Corporate Hierarchy (TTMET)',
-    currentVersionName: 'CURRENT (Official Kintone)',
+    currentVersionName: 'Official Kintone Live',
     effectiveDate: '2026-08-23',
     sourceSnapshotMeta: null,
     currentRootOrgCode: null,
+
     orgUnits: [],
     positions: [],
     assignments: [],
     employees: [],
+    officialBaseline: null,
+
+    changeOperations: [],
+    autosaveStatus: 'SAVED',
 
     undoStack: [],
     redoStack: [],
@@ -105,52 +145,105 @@ export const useOrgStore = create<OrgStoreState>()(
     validationResult: { valid: true, errors: [], warnings: [] },
 
     initializeCurrentOrganization: async () => {
+      let fetchedData: any = null;
       try {
         const resp = await fetch('http://127.0.0.1:4000/api/kintone/current-organization');
         if (resp.ok) {
           const json = await resp.json();
           if (json.success && json.data) {
-            set(state => {
-              state.viewMode = 'CURRENT_OFFICIAL';
-              state.sourceSnapshotMeta = json.meta;
-              state.orgUnits = json.data.orgUnits;
-              state.positions = json.data.positions;
-              state.assignments = json.data.assignments;
-              state.employees = json.data.employees;
-              state.validationResult = json.validation;
-              state.currentRootOrgCode = null;
-            });
-            return;
+            fetchedData = json;
           }
         }
-      } catch {
-        // Fallback to local baseline fixture
-      }
+      } catch {}
 
-      const rawEmployees = generate275EmployeesFixture();
-      const dataset = buildNormalizedDataset(CANONICAL_57_MASTER, rawEmployees, true);
+      if (fetchedData) {
+        set(state => {
+          state.sourceSnapshotMeta = fetchedData.meta;
+          state.orgUnits = fetchedData.data.orgUnits;
+          state.positions = fetchedData.data.positions;
+          state.assignments = fetchedData.data.assignments;
+          state.employees = fetchedData.data.employees;
+          state.validationResult = fetchedData.validation;
+          state.officialBaseline = {
+            orgUnits: JSON.parse(JSON.stringify(fetchedData.data.orgUnits)),
+            positions: JSON.parse(JSON.stringify(fetchedData.data.positions)),
+            assignments: JSON.parse(JSON.stringify(fetchedData.data.assignments)),
+            employees: JSON.parse(JSON.stringify(fetchedData.data.employees))
+          };
+          state.currentRootOrgCode = null;
+        });
+      } else {
+        const rawEmployees = generate275EmployeesFixture();
+        const dataset = buildNormalizedDataset(CANONICAL_57_MASTER, rawEmployees, true);
+
+        set(state => {
+          state.sourceSnapshotMeta = {
+            snapshotId: `snap-local-${Date.now()}`,
+            loadedAt: new Date().toISOString(),
+            mappingVersion: '2.0.0-canonical-57',
+            treeHash: '741ec827543763109799440bc0c9fa80'
+          };
+          state.orgUnits = dataset.orgUnits;
+          state.positions = dataset.positions;
+          state.assignments = dataset.assignments;
+          state.employees = dataset.employees;
+          state.officialBaseline = {
+            orgUnits: JSON.parse(JSON.stringify(dataset.orgUnits)),
+            positions: JSON.parse(JSON.stringify(dataset.positions)),
+            assignments: JSON.parse(JSON.stringify(dataset.assignments)),
+            employees: JSON.parse(JSON.stringify(dataset.employees))
+          };
+          state.currentRootOrgCode = null;
+          state.validationResult = validateOrganizationIntegrity(
+            dataset.orgUnits,
+            dataset.positions,
+            dataset.assignments
+          );
+        });
+      }
+    },
+
+    createDraft: (customName?: string) => {
+      const { orgUnits, positions, assignments, employees } = get();
+      const name = customName || 'FY2027 Organization Plan';
 
       set(state => {
-        state.viewMode = 'CURRENT_OFFICIAL';
-        state.sourceSnapshotMeta = {
-          snapshotId: `snap-local-${Date.now()}`,
-          loadedAt: new Date().toISOString(),
-          mappingVersion: '2.0.0-canonical-57',
-          treeHash: '741ec827543763109799440bc0c9fa80'
-        };
-        state.orgUnits = dataset.orgUnits;
-        state.positions = dataset.positions;
-        state.assignments = dataset.assignments;
-        state.employees = dataset.employees;
+        state.viewMode = 'DRAFT';
+        state.draftName = name;
+        state.currentVersionName = `Draft: ${name}`;
+        state.orgUnits = JSON.parse(JSON.stringify(orgUnits));
+        state.positions = JSON.parse(JSON.stringify(positions));
+        state.assignments = JSON.parse(JSON.stringify(assignments));
+        state.employees = JSON.parse(JSON.stringify(employees));
+        state.changeOperations = [];
         state.undoStack = [];
         state.redoStack = [];
         state.currentRootOrgCode = null;
-        state.validationResult = validateOrganizationIntegrity(
-          dataset.orgUnits,
-          dataset.positions,
-          dataset.assignments
-        );
+        state.autosaveStatus = 'SAVED';
       });
+      get().persistDraftToLocalStorage();
+    },
+
+    switchToCurrent: () => {
+      const { officialBaseline } = get();
+      if (!officialBaseline) return;
+
+      set(state => {
+        state.viewMode = 'CURRENT_OFFICIAL';
+        state.currentVersionName = 'Official Kintone Live';
+        state.orgUnits = JSON.parse(JSON.stringify(officialBaseline.orgUnits));
+        state.positions = JSON.parse(JSON.stringify(officialBaseline.positions));
+        state.assignments = JSON.parse(JSON.stringify(officialBaseline.assignments));
+        state.employees = JSON.parse(JSON.stringify(officialBaseline.employees));
+        state.currentRootOrgCode = null;
+      });
+    },
+
+    switchToDraft: () => {
+      if (get().viewMode === 'DRAFT') return;
+      if (!get().restoreDraftFromLocalStorage()) {
+        get().createDraft();
+      }
     },
 
     drillDownToOrg: (orgCode: string) => {
@@ -207,7 +300,6 @@ export const useOrgStore = create<OrgStoreState>()(
     getRollupStats: (orgCode: string) => {
       const { orgUnits, positions, assignments } = get();
 
-      // Find all descendants recursively
       const childCodes = new Set<string>([orgCode]);
       let changed = true;
       while (changed) {
@@ -220,7 +312,7 @@ export const useOrgStore = create<OrgStoreState>()(
         }
       }
 
-      const subtreePositions = positions.filter(p => childCodes.has(p.orgUnitCode));
+      const subtreePositions = positions.filter(p => childCodes.has(p.orgUnitCode) && p.lifecycle !== 'CLOSED');
       const posIds = new Set(subtreePositions.map(p => p.id));
       const activeAssignments = assignments.filter(a => posIds.has(a.positionId));
 
@@ -231,17 +323,341 @@ export const useOrgStore = create<OrgStoreState>()(
       };
     },
 
-    moveEmployee: (employeeId: string, targetPositionId: string) => {
-      const { orgUnits, positions, assignments } = get();
+    moveOrgUnit: (unitCode: string, newParentCode: string) => {
+      const { orgUnits, positions, assignments, changeOperations } = get();
+
+      const check = canReparentOrgUnit(unitCode, newParentCode, orgUnits);
+      if (!check.allowed) {
+        return { success: false, error: check.reason };
+      }
 
       set(state => {
         state.undoStack.push({
           orgUnits: JSON.parse(JSON.stringify(orgUnits)),
           positions: JSON.parse(JSON.stringify(positions)),
-          assignments: JSON.parse(JSON.stringify(assignments))
+          assignments: JSON.parse(JSON.stringify(assignments)),
+          changeOperations: JSON.parse(JSON.stringify(changeOperations))
         });
         state.redoStack = [];
       });
+
+      const parentUnit = orgUnits.find(o => o.code === newParentCode);
+      const targetUnit = orgUnits.find(o => o.code === unitCode);
+      const oldParent = targetUnit?.parentCode || 'ROOT';
+
+      set(state => {
+        const u = state.orgUnits.find(o => o.code === unitCode);
+        if (u) {
+          u.parentCode = newParentCode;
+          u.level = (parentUnit?.level || 1) + 1;
+        }
+
+        const op: ChangeOperation = {
+          id: `CHG-${Date.now()}`,
+          type: 'MOVE_ORG_UNIT',
+          targetId: unitCode,
+          targetName: targetUnit?.name || unitCode,
+          from: oldParent,
+          to: newParentCode,
+          timestamp: new Date().toISOString()
+        };
+        state.changeOperations.push(op);
+        state.autosaveStatus = 'SAVED';
+        state.validationResult = validateOrganizationIntegrity(
+          state.orgUnits,
+          state.positions,
+          state.assignments
+        );
+      });
+
+      get().persistDraftToLocalStorage();
+      return { success: true };
+    },
+
+    addOrgUnit: (data: { name: string; code: string; type: string; parentCode: string }) => {
+      const { orgUnits, positions, assignments, changeOperations } = get();
+
+      if (orgUnits.some(o => o.code.toUpperCase() === data.code.toUpperCase())) {
+        return { success: false, error: `Organization Code "${data.code}" already exists in the company!` };
+      }
+
+      const parent = orgUnits.find(o => o.code === data.parentCode);
+      if (!parent) {
+        return { success: false, error: `Parent organization "${data.parentCode}" not found.` };
+      }
+
+      set(state => {
+        state.undoStack.push({
+          orgUnits: JSON.parse(JSON.stringify(orgUnits)),
+          positions: JSON.parse(JSON.stringify(positions)),
+          assignments: JSON.parse(JSON.stringify(assignments)),
+          changeOperations: JSON.parse(JSON.stringify(changeOperations))
+        });
+        state.redoStack = [];
+      });
+
+      const newUnit: OrgUnit = {
+        code: data.code.toUpperCase().trim(),
+        name: data.name.trim(),
+        type: data.type,
+        level: parent.level + 1,
+        parentCode: data.parentCode,
+        status: 'NEW',
+        isDraftOnly: true,
+        effectiveDate: new Date().toISOString().split('T')[0]
+      };
+
+      set(state => {
+        state.orgUnits.push(newUnit);
+        state.changeOperations.push({
+          id: `CHG-${Date.now()}`,
+          type: 'ADD_ORG_UNIT',
+          targetId: newUnit.code,
+          targetName: newUnit.name,
+          to: newUnit.parentCode,
+          timestamp: new Date().toISOString()
+        });
+        state.autosaveStatus = 'SAVED';
+        state.validationResult = validateOrganizationIntegrity(
+          state.orgUnits,
+          state.positions,
+          state.assignments
+        );
+      });
+
+      get().persistDraftToLocalStorage();
+      return { success: true };
+    },
+
+    closeOrgUnit: (unitCode: string, effectiveDate: string, reason?: string) => {
+      const { orgUnits, positions, assignments, changeOperations } = get();
+
+      const check = canCloseOrgUnit(unitCode, orgUnits, positions, assignments);
+      if (!check.allowed) {
+        return { success: false, error: check.reason };
+      }
+
+      set(state => {
+        state.undoStack.push({
+          orgUnits: JSON.parse(JSON.stringify(orgUnits)),
+          positions: JSON.parse(JSON.stringify(positions)),
+          assignments: JSON.parse(JSON.stringify(assignments)),
+          changeOperations: JSON.parse(JSON.stringify(changeOperations))
+        });
+        state.redoStack = [];
+      });
+
+      set(state => {
+        const u = state.orgUnits.find(o => o.code === unitCode);
+        if (u) {
+          u.status = 'CLOSING';
+          u.effectiveDate = effectiveDate;
+          u.closingReason = reason || 'Organizational restructuring';
+        }
+
+        state.changeOperations.push({
+          id: `CHG-${Date.now()}`,
+          type: 'CLOSE_ORG_UNIT',
+          targetId: unitCode,
+          targetName: u?.name || unitCode,
+          details: { effectiveDate, reason },
+          timestamp: new Date().toISOString()
+        });
+        state.autosaveStatus = 'SAVED';
+      });
+
+      get().persistDraftToLocalStorage();
+      return { success: true };
+    },
+
+    removeDraftUnit: (unitCode: string) => {
+      const { orgUnits, positions, assignments, changeOperations } = get();
+      const unit = orgUnits.find(o => o.code === unitCode);
+
+      if (!unit || !unit.isDraftOnly) {
+        return {
+          success: false,
+          error: `Cannot hard-delete official organization unit "${unitCode}". Use "Close Unit" instead.`
+        };
+      }
+
+      set(state => {
+        state.undoStack.push({
+          orgUnits: JSON.parse(JSON.stringify(orgUnits)),
+          positions: JSON.parse(JSON.stringify(positions)),
+          assignments: JSON.parse(JSON.stringify(assignments)),
+          changeOperations: JSON.parse(JSON.stringify(changeOperations))
+        });
+        state.redoStack = [];
+
+        state.orgUnits = state.orgUnits.filter(o => o.code !== unitCode);
+        state.positions = state.positions.filter(p => p.orgUnitCode !== unitCode);
+
+        state.changeOperations.push({
+          id: `CHG-${Date.now()}`,
+          type: 'REMOVE_DRAFT_UNIT',
+          targetId: unitCode,
+          targetName: unit.name,
+          timestamp: new Date().toISOString()
+        });
+        state.autosaveStatus = 'SAVED';
+        state.selectedOrgCode = null;
+        state.validationResult = validateOrganizationIntegrity(
+          state.orgUnits,
+          state.positions,
+          state.assignments
+        );
+      });
+
+      get().persistDraftToLocalStorage();
+      return { success: true };
+    },
+
+    movePosition: (positionId: string, targetOrgUnitCode: string, newReportsToId: string | null = null) => {
+      const { orgUnits, positions, assignments, changeOperations } = get();
+
+      const posMap = new Map(positions.map(p => [p.id, p]));
+      if (newReportsToId) {
+        const cycle = detectCircularReporting(positionId, newReportsToId, posMap);
+        if (cycle.hasCycle) {
+          console.warn(`[OrgStore] Move blocked: Circular reporting detected: ${cycle.path.join(' -> ')}`);
+          return false;
+        }
+      }
+
+      set(state => {
+        state.undoStack.push({
+          orgUnits: JSON.parse(JSON.stringify(orgUnits)),
+          positions: JSON.parse(JSON.stringify(positions)),
+          assignments: JSON.parse(JSON.stringify(assignments)),
+          changeOperations: JSON.parse(JSON.stringify(changeOperations))
+        });
+        state.redoStack = [];
+
+        const targetPos = state.positions.find(p => p.id === positionId);
+        const oldUnit = targetPos?.orgUnitCode;
+        if (targetPos) {
+          targetPos.orgUnitCode = targetOrgUnitCode;
+          targetPos.reportsToPositionId = newReportsToId;
+        }
+
+        state.changeOperations.push({
+          id: `CHG-${Date.now()}`,
+          type: 'MOVE_POSITION',
+          targetId: positionId,
+          targetName: targetPos?.title || positionId,
+          from: oldUnit,
+          to: targetOrgUnitCode,
+          timestamp: new Date().toISOString()
+        });
+        state.autosaveStatus = 'SAVED';
+        state.validationResult = validateOrganizationIntegrity(
+          state.orgUnits,
+          state.positions,
+          state.assignments
+        );
+      });
+
+      get().persistDraftToLocalStorage();
+      return true;
+    },
+
+    addPosition: (data: { orgUnitCode: string; title: string; code?: string }) => {
+      const { orgUnits, positions, assignments, changeOperations } = get();
+
+      set(state => {
+        state.undoStack.push({
+          orgUnits: JSON.parse(JSON.stringify(orgUnits)),
+          positions: JSON.parse(JSON.stringify(positions)),
+          assignments: JSON.parse(JSON.stringify(assignments)),
+          changeOperations: JSON.parse(JSON.stringify(changeOperations))
+        });
+        state.redoStack = [];
+      });
+
+      const id = `pos-draft-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      const newPos: Position = {
+        id,
+        code: data.code || `POS-${Math.floor(100 + Math.random() * 900)}`,
+        title: data.title,
+        orgUnitCode: data.orgUnitCode,
+        reportsToPositionId: null,
+        lifecycle: 'VACANT',
+        isDraftOnly: true
+      };
+
+      set(state => {
+        state.positions.push(newPos);
+        state.changeOperations.push({
+          id: `CHG-${Date.now()}`,
+          type: 'ADD_POSITION',
+          targetId: newPos.id,
+          targetName: newPos.title,
+          to: newPos.orgUnitCode,
+          timestamp: new Date().toISOString()
+        });
+        state.autosaveStatus = 'SAVED';
+        state.validationResult = validateOrganizationIntegrity(
+          state.orgUnits,
+          state.positions,
+          state.assignments
+        );
+      });
+
+      get().persistDraftToLocalStorage();
+      return newPos;
+    },
+
+    closePosition: (positionId: string) => {
+      const { orgUnits, positions, assignments, changeOperations } = get();
+
+      set(state => {
+        state.undoStack.push({
+          orgUnits: JSON.parse(JSON.stringify(orgUnits)),
+          positions: JSON.parse(JSON.stringify(positions)),
+          assignments: JSON.parse(JSON.stringify(assignments)),
+          changeOperations: JSON.parse(JSON.stringify(changeOperations))
+        });
+        state.redoStack = [];
+
+        state.assignments = state.assignments.filter(a => a.positionId !== positionId);
+        const pos = state.positions.find(p => p.id === positionId);
+        if (pos) {
+          pos.lifecycle = 'CLOSING';
+        }
+
+        state.changeOperations.push({
+          id: `CHG-${Date.now()}`,
+          type: 'CLOSE_POSITION',
+          targetId: positionId,
+          targetName: pos?.title || positionId,
+          timestamp: new Date().toISOString()
+        });
+        state.autosaveStatus = 'SAVED';
+        state.validationResult = validateOrganizationIntegrity(
+          state.orgUnits,
+          state.positions,
+          state.assignments
+        );
+      });
+
+      get().persistDraftToLocalStorage();
+    },
+
+    moveEmployee: (employeeId: string, targetPositionId: string) => {
+      const { orgUnits, positions, assignments, employees, changeOperations } = get();
+
+      set(state => {
+        state.undoStack.push({
+          orgUnits: JSON.parse(JSON.stringify(orgUnits)),
+          positions: JSON.parse(JSON.stringify(positions)),
+          assignments: JSON.parse(JSON.stringify(assignments)),
+          changeOperations: JSON.parse(JSON.stringify(changeOperations))
+        });
+        state.redoStack = [];
+      });
+
+      const emp = employees.find(e => e.id === employeeId);
 
       set(state => {
         const existingAsgIndex = state.assignments.findIndex(a => a.employeeId === employeeId);
@@ -259,9 +675,9 @@ export const useOrgStore = create<OrgStoreState>()(
           isPrimary: true
         });
 
-        const targetPos = state.positions.find(p => p.id === targetPositionId);
-        if (targetPos) {
-          targetPos.lifecycle = 'ACTIVE';
+        const targetPosInDraft = state.positions.find(p => p.id === targetPositionId);
+        if (targetPosInDraft) {
+          targetPosInDraft.lifecycle = 'ACTIVE';
         }
 
         if (previousPosId && previousPosId !== targetPositionId) {
@@ -274,6 +690,16 @@ export const useOrgStore = create<OrgStoreState>()(
           }
         }
 
+        state.changeOperations.push({
+          id: `CHG-${Date.now()}`,
+          type: 'MOVE_EMPLOYEE',
+          targetId: employeeId,
+          targetName: emp?.nameEN || employeeId,
+          from: previousPosId,
+          to: targetPositionId,
+          timestamp: new Date().toISOString()
+        });
+        state.autosaveStatus = 'SAVED';
         state.validationResult = validateOrganizationIntegrity(
           state.orgUnits,
           state.positions,
@@ -281,81 +707,19 @@ export const useOrgStore = create<OrgStoreState>()(
         );
       });
 
+      get().persistDraftToLocalStorage();
       return true;
     },
 
-    movePosition: (positionId: string, targetOrgUnitCode: string, newReportsToId: string | null = null) => {
-      const { orgUnits, positions, assignments } = get();
-
-      const posMap = new Map(positions.map(p => [p.id, p]));
-      if (newReportsToId) {
-        const cycle = detectCircularReporting(positionId, newReportsToId, posMap);
-        if (cycle.hasCycle) {
-          console.warn(`[OrgStore] Move blocked: Circular reporting detected: ${cycle.path.join(' -> ')}`);
-          return false;
-        }
-      }
+    vacatePosition: (positionId: string) => {
+      const { orgUnits, positions, assignments, changeOperations } = get();
 
       set(state => {
         state.undoStack.push({
           orgUnits: JSON.parse(JSON.stringify(orgUnits)),
           positions: JSON.parse(JSON.stringify(positions)),
-          assignments: JSON.parse(JSON.stringify(assignments))
-        });
-        state.redoStack = [];
-
-        const targetPos = state.positions.find(p => p.id === positionId);
-        if (targetPos) {
-          targetPos.orgUnitCode = targetOrgUnitCode;
-          targetPos.reportsToPositionId = newReportsToId;
-        }
-
-        state.validationResult = validateOrganizationIntegrity(
-          state.orgUnits,
-          state.positions,
-          state.assignments
-        );
-      });
-
-      return true;
-    },
-
-    createPosition: (orgUnitCode: string, title: string) => {
-      const id = `pos-draft-${Date.now()}`;
-      const newPos: Position = {
-        id,
-        code: `POS-NEW-${Math.floor(100 + Math.random() * 900)}`,
-        title,
-        orgUnitCode,
-        reportsToPositionId: null,
-        lifecycle: 'VACANT'
-      };
-
-      set(state => {
-        state.undoStack.push({
-          orgUnits: JSON.parse(JSON.stringify(state.orgUnits)),
-          positions: JSON.parse(JSON.stringify(state.positions)),
-          assignments: JSON.parse(JSON.stringify(state.assignments))
-        });
-        state.redoStack = [];
-
-        state.positions.push(newPos);
-        state.validationResult = validateOrganizationIntegrity(
-          state.orgUnits,
-          state.positions,
-          state.assignments
-        );
-      });
-
-      return newPos;
-    },
-
-    vacatePosition: (positionId: string) => {
-      set(state => {
-        state.undoStack.push({
-          orgUnits: JSON.parse(JSON.stringify(state.orgUnits)),
-          positions: JSON.parse(JSON.stringify(state.positions)),
-          assignments: JSON.parse(JSON.stringify(state.assignments))
+          assignments: JSON.parse(JSON.stringify(assignments)),
+          changeOperations: JSON.parse(JSON.stringify(changeOperations))
         });
         state.redoStack = [];
 
@@ -365,16 +729,26 @@ export const useOrgStore = create<OrgStoreState>()(
           pos.lifecycle = 'VACANT';
         }
 
+        state.changeOperations.push({
+          id: `CHG-${Date.now()}`,
+          type: 'VACATE_POSITION',
+          targetId: positionId,
+          targetName: pos?.title || positionId,
+          timestamp: new Date().toISOString()
+        });
+        state.autosaveStatus = 'SAVED';
         state.validationResult = validateOrganizationIntegrity(
           state.orgUnits,
           state.positions,
           state.assignments
         );
       });
+
+      get().persistDraftToLocalStorage();
     },
 
     undo: () => {
-      const { undoStack, orgUnits, positions, assignments } = get();
+      const { undoStack, orgUnits, positions, assignments, changeOperations } = get();
       if (undoStack.length === 0) return;
 
       const previousState = undoStack[undoStack.length - 1];
@@ -383,23 +757,28 @@ export const useOrgStore = create<OrgStoreState>()(
         state.redoStack.push({
           orgUnits: JSON.parse(JSON.stringify(orgUnits)),
           positions: JSON.parse(JSON.stringify(positions)),
-          assignments: JSON.parse(JSON.stringify(assignments))
+          assignments: JSON.parse(JSON.stringify(assignments)),
+          changeOperations: JSON.parse(JSON.stringify(changeOperations))
         });
         state.undoStack.pop();
 
         state.orgUnits = previousState.orgUnits;
         state.positions = previousState.positions;
         state.assignments = previousState.assignments;
+        state.changeOperations = previousState.changeOperations;
+        state.autosaveStatus = 'SAVED';
         state.validationResult = validateOrganizationIntegrity(
           state.orgUnits,
           state.positions,
           state.assignments
         );
       });
+
+      get().persistDraftToLocalStorage();
     },
 
     redo: () => {
-      const { redoStack, orgUnits, positions, assignments } = get();
+      const { redoStack, orgUnits, positions, assignments, changeOperations } = get();
       if (redoStack.length === 0) return;
 
       const nextState = redoStack[redoStack.length - 1];
@@ -408,19 +787,24 @@ export const useOrgStore = create<OrgStoreState>()(
         state.undoStack.push({
           orgUnits: JSON.parse(JSON.stringify(orgUnits)),
           positions: JSON.parse(JSON.stringify(positions)),
-          assignments: JSON.parse(JSON.stringify(assignments))
+          assignments: JSON.parse(JSON.stringify(assignments)),
+          changeOperations: JSON.parse(JSON.stringify(changeOperations))
         });
         state.redoStack.pop();
 
         state.orgUnits = nextState.orgUnits;
         state.positions = nextState.positions;
         state.assignments = nextState.assignments;
+        state.changeOperations = nextState.changeOperations;
+        state.autosaveStatus = 'SAVED';
         state.validationResult = validateOrganizationIntegrity(
           state.orgUnits,
           state.positions,
           state.assignments
         );
       });
+
+      get().persistDraftToLocalStorage();
     },
 
     saveNamedVersion: (versionNumber: string) => {
@@ -521,36 +905,42 @@ export const useOrgStore = create<OrgStoreState>()(
       });
     },
 
-    persistToLocalStorage: () => {
-      const { planName, effectiveDate, orgUnits, positions, assignments, employees } = get();
+    persistDraftToLocalStorage: () => {
+      const { draftName, effectiveDate, orgUnits, positions, assignments, employees, changeOperations } = get();
       const payload = JSON.stringify({
-        planName,
+        draftName,
         effectiveDate,
         orgUnits,
         positions,
         assignments,
         employees,
+        changeOperations,
         savedAt: new Date().toISOString()
       });
       if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem(STORAGE_KEY, payload);
+        window.localStorage.setItem(DRAFT_STORAGE_KEY, payload);
       }
     },
 
-    restoreFromLocalStorage: () => {
+    restoreDraftFromLocalStorage: () => {
       if (typeof window === 'undefined' || !window.localStorage) return false;
-      const dataStr = window.localStorage.getItem(STORAGE_KEY);
+      const dataStr = window.localStorage.getItem(DRAFT_STORAGE_KEY);
       if (!dataStr) return false;
 
       try {
         const parsed = JSON.parse(dataStr);
         set(state => {
-          state.planName = parsed.planName;
+          state.viewMode = 'DRAFT';
+          state.draftName = parsed.draftName || 'FY2027 Organization Plan';
+          state.currentVersionName = `Draft: ${state.draftName}`;
           state.effectiveDate = parsed.effectiveDate;
           state.orgUnits = parsed.orgUnits;
           state.positions = parsed.positions;
           state.assignments = parsed.assignments;
           state.employees = parsed.employees;
+          state.changeOperations = parsed.changeOperations || [];
+          state.currentRootOrgCode = null;
+          state.autosaveStatus = 'SAVED';
           state.validationResult = validateOrganizationIntegrity(
             parsed.orgUnits,
             parsed.positions,
@@ -559,7 +949,7 @@ export const useOrgStore = create<OrgStoreState>()(
         });
         return true;
       } catch (err) {
-        console.error('[OrgStore] Failed to restore from localStorage', err);
+        console.error('[OrgStore] Failed to restore draft from localStorage', err);
         return false;
       }
     }

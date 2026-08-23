@@ -1,6 +1,6 @@
-﻿import React from 'react';
+import React from 'react';
 import { DiffReport } from '@orgflow/domain';
-import { X, ArrowRight, UserCheck, AlertTriangle } from 'lucide-react';
+import { Layers, ArrowRight, AlertTriangle, UserCheck, X } from 'lucide-react';
 
 interface CompareModalProps {
   isOpen: boolean;
@@ -19,18 +19,27 @@ export const CompareModal: React.FC<CompareModalProps> = ({
 }) => {
   if (!isOpen || !diff) return null;
 
+  const movedEmployees = diff.movedEmployees || [];
+  const createdPositions = diff.createdPositions || [];
+  const vacatedPositions = diff.vacatedPositions || [];
+  const reportingChanges = diff.reportingChanges || [];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden text-slate-100">
         <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
-          <div>
-            <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-              <span>Organization Version Diff Comparison</span>
-            </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Comparing <span className="text-emerald-400 font-semibold">{baseVersionName}</span> (Baseline) against{' '}
-              <span className="text-blue-400 font-semibold">{targetVersionName}</span> (Working Copy)
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+              <Layers className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold tracking-tight">Organization Diff Engine</h2>
+              <div className="flex items-center gap-2 text-xs text-slate-400">
+                <span className="text-slate-300 font-medium">{baseVersionName}</span>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-600" />
+                <span className="text-purple-400 font-semibold">{targetVersionName}</span>
+              </div>
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -44,32 +53,32 @@ export const CompareModal: React.FC<CompareModalProps> = ({
           <div className="grid grid-cols-4 gap-3">
             <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl">
               <div className="text-xs text-slate-400">Employee Transfers</div>
-              <div className="text-2xl font-bold text-emerald-400 mt-1">{diff.movedEmployees.length}</div>
+              <div className="text-2xl font-bold text-emerald-400 mt-1">{movedEmployees.length}</div>
             </div>
             <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl">
               <div className="text-xs text-slate-400">Created Positions</div>
-              <div className="text-2xl font-bold text-blue-400 mt-1">{diff.createdPositions.length}</div>
+              <div className="text-2xl font-bold text-blue-400 mt-1">{createdPositions.length}</div>
             </div>
             <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl">
               <div className="text-xs text-slate-400">Vacated Positions</div>
-              <div className="text-2xl font-bold text-amber-400 mt-1">{diff.vacatedPositions.length}</div>
+              <div className="text-2xl font-bold text-amber-400 mt-1">{vacatedPositions.length}</div>
             </div>
             <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl">
               <div className="text-xs text-slate-400">Reporting Changes</div>
-              <div className="text-2xl font-bold text-purple-400 mt-1">{diff.reportingChanges.length}</div>
+              <div className="text-2xl font-bold text-purple-400 mt-1">{reportingChanges.length}</div>
             </div>
           </div>
 
           <div>
             <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <UserCheck className="w-4 h-4 text-emerald-400" />
-              Employee Transfers ({diff.movedEmployees.length})
+              Employee Transfers ({movedEmployees.length})
             </h3>
-            {diff.movedEmployees.length === 0 ? (
+            {movedEmployees.length === 0 ? (
               <div className="p-3 bg-slate-950/50 rounded-lg text-xs text-slate-500 italic">No employee transfers</div>
             ) : (
               <div className="space-y-1.5">
-                {diff.movedEmployees.map((m, idx) => (
+                {movedEmployees.map((m, idx) => (
                   <div key={idx} className="p-3 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-between text-xs">
                     <span className="font-semibold text-slate-200">{m.employeeName}</span>
                     <div className="flex items-center gap-2 text-slate-400">
@@ -86,13 +95,13 @@ export const CompareModal: React.FC<CompareModalProps> = ({
           <div>
             <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <AlertTriangle className="w-4 h-4 text-amber-400" />
-              Vacated Positions ({diff.vacatedPositions.length})
+              Vacated Positions ({vacatedPositions.length})
             </h3>
-            {diff.vacatedPositions.length === 0 ? (
+            {vacatedPositions.length === 0 ? (
               <div className="p-3 bg-slate-950/50 rounded-lg text-xs text-slate-500 italic">No vacated positions</div>
             ) : (
               <div className="space-y-1.5">
-                {diff.vacatedPositions.map((v, idx) => (
+                {vacatedPositions.map((v, idx) => (
                   <div key={idx} className="p-3 bg-amber-950/20 border border-amber-900/50 rounded-lg flex items-center justify-between text-xs">
                     <span className="font-semibold text-amber-200">{v.positionCode} - {v.title}</span>
                     <span className="px-2 py-0.5 bg-amber-950 text-amber-400 rounded border border-amber-800 font-mono text-[10px]">

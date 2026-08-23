@@ -2,6 +2,7 @@
 
 | Skill Domain | Purpose | Status | Last Updated |
 |---|---|---|---|
+| Safe Draft Editing | Domain commands, anti-cycle checks, vacancy rules & change operations | Active | 2026-08-23 |
 | HR Org Chart UX | Light corporate theme, progressive disclosure, search-to-focus & collapsible panels | Active | 2026-08-23 |
 | Kintone Integration | Read-only REST client, field mapping, batching & source snapshots | Active | 2026-08-23 |
 | Application Security | Zero-secret frontend, secure headers, CORS & sensitive field omission | Active | 2026-08-23 |

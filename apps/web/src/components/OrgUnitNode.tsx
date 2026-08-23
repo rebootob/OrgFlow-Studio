@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { Handle, Position as FlowPosition } from '@xyflow/react';
 import { OrgUnit, Position, Assignment, Employee } from '@orgflow/domain';
-import { AlertCircle, Users, ArrowDownRight, Briefcase } from 'lucide-react';
+import { AlertCircle, Users, ArrowDownRight, Briefcase, Sparkles, Archive } from 'lucide-react';
 import { useOrgStore } from '../store/orgStore.js';
 
 interface PositionDetail {
@@ -18,6 +18,7 @@ interface OrgUnitNodeData {
 export const OrgUnitNode = memo(({ data }: { data: OrgUnitNodeData }) => {
   const { orgUnit, positions } = data;
   const {
+    viewMode,
     selectedOrgCode,
     selectedPositionId,
     setSelectedOrgCode,
@@ -30,6 +31,7 @@ export const OrgUnitNode = memo(({ data }: { data: OrgUnitNodeData }) => {
   const isSelected = selectedOrgCode === orgUnit.code;
   const rollup = getRollupStats(orgUnit.code);
   const isDrilledHere = currentRootOrgCode === orgUnit.code;
+  const isDraftMode = viewMode === 'DRAFT';
 
   // Level badge colors
   const levelBadgeMap: Record<number, { bg: string; text: string; border: string }> = {
@@ -54,7 +56,9 @@ export const OrgUnitNode = memo(({ data }: { data: OrgUnitNodeData }) => {
       }}
       className={`w-[360px] bg-white rounded-2xl border transition-all duration-150 shadow-xs select-none ${
         isSelected
-          ? 'border-emerald-500 ring-4 ring-emerald-100 shadow-md'
+          ? isDraftMode
+            ? 'border-indigo-500 ring-4 ring-indigo-100 shadow-md'
+            : 'border-emerald-500 ring-4 ring-emerald-100 shadow-md'
           : 'border-slate-200 hover:border-slate-300 hover:shadow-sm'
       }`}
     >
@@ -67,14 +71,26 @@ export const OrgUnitNode = memo(({ data }: { data: OrgUnitNodeData }) => {
 
       {/* Node Header */}
       <div className="p-3.5 border-b border-slate-100 flex items-center justify-between">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0">
           <span className={`text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full border ${badgeStyle.bg} ${badgeStyle.text} ${badgeStyle.border}`}>
             {orgUnit.type}
           </span>
           <span className="font-mono text-xs font-bold text-slate-900 truncate">
             {orgUnit.code}
           </span>
+
+          {orgUnit.status === 'NEW' && (
+            <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.2 bg-indigo-50 text-indigo-700 font-bold border border-indigo-200 rounded">
+              <Sparkles className="w-2.5 h-2.5" /> NEW
+            </span>
+          )}
+          {orgUnit.status === 'CLOSING' && (
+            <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.2 bg-amber-50 text-amber-800 font-bold border border-amber-200 rounded">
+              <Archive className="w-2.5 h-2.5" /> CLOSING
+            </span>
+          )}
         </div>
+
         <div className="flex items-center gap-2 text-xs text-slate-500">
           <div className="flex items-center gap-1 font-semibold text-slate-700" title="Total Headcount in this Unit and Sub-units">
             <Users className="w-3.5 h-3.5 text-slate-400" />
@@ -103,7 +119,11 @@ export const OrgUnitNode = memo(({ data }: { data: OrgUnitNodeData }) => {
                 e.stopPropagation();
                 drillDownToOrg(orgUnit.code);
               }}
-              className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-lg font-semibold flex items-center gap-1 transition-colors"
+              className={`px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1 transition-colors ${
+                isDraftMode
+                  ? 'bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-800'
+                  : 'bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800'
+              }`}
             >
               <span>Drill In ({rollup.childUnitCount})</span>
               <ArrowDownRight className="w-3 h-3" />
@@ -131,7 +151,9 @@ export const OrgUnitNode = memo(({ data }: { data: OrgUnitNodeData }) => {
                 }}
                 className={`p-2.5 rounded-xl border text-xs transition-all cursor-pointer ${
                   isPosSelected
-                    ? 'border-emerald-500 bg-emerald-50/50 ring-2 ring-emerald-200'
+                    ? isDraftMode
+                      ? 'border-indigo-500 bg-indigo-50/50 ring-2 ring-indigo-200'
+                      : 'border-emerald-500 bg-emerald-50/50 ring-2 ring-emerald-200'
                     : isVacant
                     ? 'bg-amber-50/60 border-amber-200/80 hover:bg-amber-50 text-amber-900'
                     : 'bg-white border-slate-200/80 hover:bg-slate-50 text-slate-800'
@@ -178,7 +200,9 @@ export const OrgUnitNode = memo(({ data }: { data: OrgUnitNodeData }) => {
       <Handle
         type="source"
         position={FlowPosition.Bottom}
-        className="!w-2.5 !h-2.5 !bg-emerald-500 !border-2 !border-white"
+        className={`!w-2.5 !h-2.5 !border-2 !border-white ${
+          isDraftMode ? '!bg-indigo-500' : '!bg-emerald-500'
+        }`}
       />
     </div>
   );
