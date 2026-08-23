@@ -52,7 +52,7 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({ onFocusNode }) => {
   const [isCloseOrgOpen, setIsCloseOrgOpen] = useState(false);
   const [isAddPosOpen, setIsAddPosOpen] = useState(false);
   const [isMoveEmpOpen, setIsMoveEmpOpen] = useState(false);
-  const [posFilter, setPosFilter] = useState<'ALL' | 'SHOWN' | 'HIDDEN'>('ALL');
+  const [posFilter, setPosFilter] = useState<'ALL' | 'SHOWN' | 'HIDDEN' | 'REVIEW'>('ALL');
 
   if (!selectedOrgCode && !selectedPositionId) {
     return null;
@@ -78,11 +78,16 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({ onFocusNode }) => {
     const res = resolveChartVisibility({ position: p, orgUnit: currentOrg || undefined });
     if (posFilter === 'SHOWN') return res.visible;
     if (posFilter === 'HIDDEN') return !res.visible;
+    if (posFilter === 'REVIEW') return res.visible && res.source === 'AUTO_RULE';
     return true;
   });
 
   const shownCount = orgPositions.filter(p => resolveChartVisibility({ position: p, orgUnit: currentOrg || undefined }).visible).length;
   const hiddenCount = orgPositions.length - shownCount;
+  const reviewCount = orgPositions.filter(p => {
+    const r = resolveChartVisibility({ position: p, orgUnit: currentOrg || undefined });
+    return r.visible && r.source === 'AUTO_RULE';
+  }).length;
 
   const currentPosResolution = currentPos
     ? resolveChartVisibility({ position: currentPos, orgUnit: currentPos.orgUnitCode ? orgMap.get(currentPos.orgUnitCode) : undefined })
@@ -309,6 +314,13 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({ onFocusNode }) => {
                     className={`flex-1 py-1 rounded transition-colors ${posFilter === 'HIDDEN' ? 'bg-white shadow-2xs text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
                   >
                     Hidden ({hiddenCount})
+                  </button>
+                  <button
+                    onClick={() => setPosFilter('REVIEW')}
+                    className={`flex-1 py-1 rounded transition-colors ${posFilter === 'REVIEW' ? 'bg-white shadow-2xs text-indigo-800' : 'text-slate-500 hover:text-slate-700'}`}
+                    title="Positions resolved visible by AUTO rule (Subject to HR calibration)"
+                  >
+                    Review ({reviewCount})
                   </button>
                 </div>
 

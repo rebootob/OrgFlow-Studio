@@ -81,7 +81,7 @@ describe('Phase 6.5: Organization Display Policy & Employee Assignment Audit', (
     const presRes = resolveChartVisibility({ position: presPos!, orgUnit: dataset.orgUnits.find(o => o.code === presPos!.orgUnitCode) });
     expect(presRes.visible).toBe(true);
     expect(presRes.source).toBe('PRESENTATION_MAPPING');
-    expect(presRes.reason).toContain('Executive Level 1 root node');
+    expect(presRes.reason).toContain('Executive Level 1 President root node');
 
     const mgrPos = dataset.positions.find(p => p.title.includes('Manager'));
     expect(mgrPos).toBeDefined();

@@ -7,11 +7,12 @@ export interface ResolveVisibilityOptions {
 }
 
 /**
+ * Deterministic Policy Precedence:
  * 1. Explicit Position Override (SHOW / HIDE)
  *      ↓
- * 2. Verified Organization Presentation Mapping (Executive/Leadership/SPMKT)
+ * 2. Verified Organization Presentation Mapping (Executive / Leadership / SPMKT)
  *      ↓
- * 3. Default AUTO Rule (Levels 1-4 and Department/Section leadership -> SHOW; General operational staff -> HIDE)
+ * 3. Structural AUTO Default Rule (Unit Heads of L1-L4 and Team Chiefs of L5 -> SHOW; General operational staff -> HIDE)
  */
 export function resolveChartVisibility(options: ResolveVisibilityOptions): VisibilityResolution {
   const { position, orgUnit, explicitOverride } = options;
@@ -36,77 +37,84 @@ export function resolveChartVisibility(options: ResolveVisibilityOptions): Visib
     };
   }
 
-  // 2. Verified Organization Presentation Mapping
-  // Top Management & Executive anchors
-  if (position.orgUnitCode === 'TTMET' || position.title.toLowerCase().includes('president')) {
+  const titleLower = (position.title || '').toLowerCase();
+
+  // 2. Verified Organization Presentation Mapping (Executive & Presentation Anchors)
+  if (titleLower.includes('president') && !titleLower.includes('vice')) {
     return {
       positionId: position.id,
       visible: true,
       source: 'PRESENTATION_MAPPING',
-      reason: 'Executive Level 1 root node anchored on official organization chart'
+      reason: 'Executive Level 1 President root node anchored on official organization chart'
     };
   }
 
-  if (position.orgUnitCode.startsWith('DIV-') || position.title.toLowerCase().includes('vice president')) {
+  if (titleLower.includes('vice president') || (orgUnit && orgUnit.level === 2 && titleLower.includes('vp'))) {
     return {
       positionId: position.id,
       visible: true,
       source: 'PRESENTATION_MAPPING',
-      reason: 'Division Level 2 leadership anchored on official organization chart'
+      reason: 'Division Level 2 Vice President leadership anchored on official organization chart'
     };
   }
 
-  // Support Marketing presentation overlay layer
-  if (position.orgUnitCode.includes('SPMKT') || position.title.toLowerCase().includes('support marketing')) {
+  if (position.orgUnitCode.includes('SPMKT') || titleLower.includes('support marketing')) {
     return {
       positionId: position.id,
       visible: true,
       source: 'PRESENTATION_MAPPING',
-      reason: 'Support Marketing (SPMKT) presentation matrix row'
+      reason: 'Support Marketing (SPMKT) cross-functional presentation matrix row'
     };
   }
 
-  // 3. Default AUTO Rule
+  // 3. Structural AUTO Default Rule (Structural Unit Heads & Official Team Chiefs)
   if (orgUnit) {
-    // Leadership of Departments (L3) & Sections (L4)
-    if (orgUnit.level <= 4 && (
-      position.title.toLowerCase().includes('manager') ||
-      position.title.toLowerCase().includes('head') ||
-      position.title.toLowerCase().includes('acting') ||
-      position.title.toLowerCase().includes('chief') ||
-      position.title.toLowerCase().includes('lead')
-    )) {
-      return {
-        positionId: position.id,
-        visible: true,
-        source: 'AUTO_RULE',
-        reason: `Leadership/Chief position in Level ${orgUnit.level} unit (${orgUnit.name})`
-      };
+    // Level 3 Departments (e.g. TMT0, TMF0, TME0, TMS0, TMG0, TMH0)
+    // Show General Manager, Deputy General Manager, Factory Manager
+    if (orgUnit.level === 3) {
+      if (titleLower.includes('general manager') || titleLower.includes('factory manager') || titleLower.includes('dgm') || (titleLower.includes('manager') && titleLower.includes('acting'))) {
+        return {
+          positionId: position.id,
+          visible: true,
+          source: 'AUTO_RULE',
+          reason: `Department Head position in Level 3 unit (${orgUnit.name})`
+        };
+      }
     }
 
-    // Key Team Leads and Functional Supervisors (L5/L6)
-    if (orgUnit.level >= 5 && (
-      position.title.toLowerCase().includes('manager') ||
-      position.title.toLowerCase().includes('chief') ||
-      position.title.toLowerCase().includes('lead') ||
-      position.title.toLowerCase().includes('supervisor') ||
-      position.title.toLowerCase().includes('specialist')
-    )) {
-      return {
-        positionId: position.id,
-        visible: true,
-        source: 'AUTO_RULE',
-        reason: `Functional Team Lead/Chief in Level ${orgUnit.level} unit (${orgUnit.name})`
-      };
+    // Level 4 Sections (e.g. TMT1-TMS1, TMG1-TMG2, TMH1-TMH3)
+    // Show Section Manager / Acting Section Manager
+    if (orgUnit.level === 4) {
+      if (titleLower.includes('manager') || titleLower.includes('acting') || titleLower.includes('head') || titleLower.includes('chief')) {
+        return {
+          positionId: position.id,
+          visible: true,
+          source: 'AUTO_RULE',
+          reason: `Section Manager leadership in Level 4 unit (${orgUnit.name})`
+        };
+      }
+    }
+
+    // Level 5 Teams (e.g. Machine & Equipments, CAD Team, Automotive Team, IT Chief, Chief Accountant)
+    // Show official Team Lead / Chief of the sub-unit
+    if (orgUnit.level === 5) {
+      if (titleLower.includes('chief') || titleLower.includes('lead') || titleLower.includes('asst. manager') || titleLower.includes('assistant manager') || titleLower.includes('supervisor')) {
+        return {
+          positionId: position.id,
+          visible: true,
+          source: 'AUTO_RULE',
+          reason: `Team Chief / Lead in Level 5 functional sub-unit (${orgUnit.name})`
+        };
+      }
     }
   }
 
-  // Default: Operational / Line / Clerical positions are summarized in unit headcount
+  // Operational staff, technicians, operators, clerical roles in Level 5, 6, 7 units are summarized in unit headcount
   return {
     positionId: position.id,
     visible: false,
     source: 'AUTO_RULE',
-    reason: 'Operational / staff role summarized in unit headcount and accessible via Right Detail Panel'
+    reason: `Operational position in Level ${orgUnit ? orgUnit.level : 0} unit summarized in headcount (accessible via Detail Panel & Search)`
   };
 }
 
@@ -123,6 +131,8 @@ export interface PositionDisplayMatrixRow {
   resolvedVisible: boolean;
   source: string;
   reason: string;
+  referenceMatch: 'MATCH' | 'CURRENT_ONLY' | 'NOT_DISPLAYED';
+  confidence: 'HIGH' | 'MEDIUM' | 'NEEDS_REVIEW';
 }
 
 export function buildPositionDisplayMatrix(
@@ -149,6 +159,23 @@ export function buildPositionDisplayMatrix(
     const override = overrides ? overrides.get(pos.id) : undefined;
     const resolution = resolveChartVisibility({ position: pos, orgUnit: org, explicitOverride: override });
 
+    // Determine reference match and confidence
+    let referenceMatch: 'MATCH' | 'CURRENT_ONLY' | 'NOT_DISPLAYED' = 'NOT_DISPLAYED';
+    let confidence: 'HIGH' | 'MEDIUM' | 'NEEDS_REVIEW' = 'HIGH';
+
+    if (resolution.visible) {
+      if (resolution.source === 'PRESENTATION_MAPPING' || (org && org.level <= 4)) {
+        referenceMatch = 'MATCH';
+        confidence = 'HIGH';
+      } else if (org && org.level === 5) {
+        referenceMatch = 'CURRENT_ONLY';
+        confidence = 'HIGH';
+      } else {
+        referenceMatch = 'CURRENT_ONLY';
+        confidence = 'NEEDS_REVIEW';
+      }
+    }
+
     return {
       positionId: pos.id,
       positionCode: pos.code,
@@ -161,7 +188,9 @@ export function buildPositionDisplayMatrix(
       setting: override || pos.chartVisibility || 'AUTO',
       resolvedVisible: resolution.visible,
       source: resolution.source,
-      reason: resolution.reason
+      reason: resolution.reason,
+      referenceMatch,
+      confidence
     };
   });
 }
