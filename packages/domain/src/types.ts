@@ -33,6 +33,21 @@ export type PositionLifecycle =
   | 'CLOSING'
   | 'CLOSED';
 
+export type ChartVisibility = 'AUTO' | 'SHOW' | 'HIDE';
+
+export type VisibilityResolutionSource =
+  | 'EXPLICIT_SHOW'
+  | 'EXPLICIT_HIDE'
+  | 'PRESENTATION_MAPPING'
+  | 'AUTO_RULE';
+
+export interface VisibilityResolution {
+  positionId: string;
+  visible: boolean;
+  source: VisibilityResolutionSource;
+  reason: string;
+}
+
 export interface Position {
   id: string;
   code: string;
@@ -40,6 +55,8 @@ export interface Position {
   orgUnitCode: string;
   reportsToPositionId: string | null;
   lifecycle: PositionLifecycle;
+  chartVisibility?: ChartVisibility;
+  displayOrder?: number;
   effectiveFrom?: string;
   effectiveTo?: string;
   isDraftOnly?: boolean;

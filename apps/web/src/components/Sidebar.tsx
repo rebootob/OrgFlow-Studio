@@ -37,13 +37,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [activeTab, setActiveTab] = useState<'PEOPLE' | 'VACANCIES' | 'DEPTS'>('PEOPLE');
   const [selectedDeptFilter, setSelectedDeptFilter] = useState<string>('ALL');
 
-  const asgMap = new Map(assignments.map(a => [a.positionId, a]));
+  const asgByEmpId = new Map(assignments.map(a => [a.employeeId, a]));
   const posMap = new Map(positions.map(p => [p.id, p]));
 
   // Filtered employees based on search & department filter
   const filteredEmployees = employees.filter(e => {
     const q = searchQuery.trim().toLowerCase();
-    const asg = asgMap.get(e.id);
+    const asg = asgByEmpId.get(e.id);
     const pos = asg ? posMap.get(asg.positionId) : null;
 
     if (selectedDeptFilter !== 'ALL' && pos && pos.orgUnitCode !== selectedDeptFilter) {
@@ -216,7 +216,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 Search Results ({filteredEmployees.length})
               </div>
               {filteredEmployees.map(emp => {
-                const asg = asgMap.get(emp.id);
+                const asg = asgByEmpId.get(emp.id);
                 const pos = asg ? posMap.get(asg.positionId) : null;
                 return (
                   <div

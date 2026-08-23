@@ -13,7 +13,8 @@ import {
   canCloseOrgUnit,
   computeVersionDiff,
   detectCircularReporting,
-  buildNormalizedDataset
+  buildNormalizedDataset,
+  ChartVisibility
 } from '@orgflow/domain';
 import { CANONICAL_57_MASTER, generate275EmployeesFixture } from '../data/baseline.js';
 
@@ -99,6 +100,7 @@ export interface OrgStoreState {
   addPosition: (data: { orgUnitCode: string; title: string; code?: string }) => Position;
   closePosition: (positionId: string) => void;
   vacatePosition: (positionId: string) => void;
+  updatePositionVisibility: (positionId: string, visibility: ChartVisibility) => void;
 
   moveEmployee: (employeeId: string, targetPositionId: string) => boolean;
 
@@ -721,6 +723,43 @@ export const useOrgStore = create<OrgStoreState>()(
           state.positions,
           state.assignments
         );
+      });
+
+      get().persistDraftToLocalStorage();
+    },
+
+    // -------------------------------------------------------------------------
+    // Presentation Command: Update Position Chart Visibility (Draft Mode Only)
+    // -------------------------------------------------------------------------
+    updatePositionVisibility: (positionId: string, visibility: ChartVisibility) => {
+      const { viewMode, orgUnits, positions, assignments, changeOperations } = get();
+      if (viewMode === 'CURRENT_OFFICIAL') {
+        console.warn('[OrgStore] Cannot modify chart visibility in Read-Only Current Official mode.');
+        return;
+      }
+
+      set(state => {
+        state.undoStack.push({
+          orgUnits: JSON.parse(JSON.stringify(orgUnits)),
+          positions: JSON.parse(JSON.stringify(positions)),
+          assignments: JSON.parse(JSON.stringify(assignments)),
+          changeOperations: JSON.parse(JSON.stringify(changeOperations))
+        });
+        state.redoStack = [];
+
+        const pos = state.positions.find(p => p.id === positionId);
+        if (pos) {
+          pos.chartVisibility = visibility;
+        }
+
+        state.changeOperations.push({
+          id: `CHG-${Date.now()}`,
+          type: 'MOVE_POSITION', // tracks presentation attribute change
+          targetId: positionId,
+          targetName: `${pos?.title || positionId} [Visibility -> ${visibility}]`,
+          timestamp: new Date().toISOString()
+        });
+        state.autosaveStatus = 'SAVED';
       });
 
       get().persistDraftToLocalStorage();

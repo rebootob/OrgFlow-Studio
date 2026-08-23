@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Handle, Position as FlowPosition } from '@xyflow/react';
-import { OrgUnit, Position, Assignment, Employee } from '@orgflow/domain';
+import { OrgUnit, Position, Assignment, Employee, resolveChartVisibility } from '@orgflow/domain';
 import {
   Users,
   Briefcase,
@@ -57,9 +57,9 @@ export const OrgUnitNode = memo(({ data }: { data: OrgUnitNodeData }) => {
   const badgeStyle = levelBadgeMap[orgUnit.level] || levelBadgeMap[5];
   const vacantCount = rollup.vacantCount;
 
-  // Active employees for People mode preview
+  // Active employees for People mode preview (filtered by resolved display policy)
   const activeEmployees = positions
-    .filter(p => p.employee && p.employee.id !== leaderInfo.employee?.id)
+    .filter(p => p.employee && p.employee.id !== leaderInfo.employee?.id && resolveChartVisibility({ position: p.position, orgUnit }).visible)
     .map(p => p.employee!);
 
   const handleSelect = (e: React.MouseEvent) => {

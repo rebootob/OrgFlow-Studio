@@ -4,3 +4,4 @@ export * from './normalizer.js';
 export * from './diff.js';
 export * from './invariants.js';
 export * from './pdfPrint.js';
+export * from './displayPolicy.js';
