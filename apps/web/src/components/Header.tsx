@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { useOrgStore } from '../store/orgStore.js';
 import {
   GitBranch,
@@ -8,7 +8,8 @@ import {
   GitCompare,
   Save,
   ShieldCheck,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -20,6 +21,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCompare, onOpenPrint }) =>
   const {
     planName,
     currentVersionName,
+    sourceSnapshotMeta,
     undoStack,
     redoStack,
     undo,
@@ -29,7 +31,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCompare, onOpenPrint }) =>
     loadVersionSnapshot,
     compareWithVersion,
     validationResult,
-    initializeBaseline
+    initializeCurrentOrganization
   } = useOrgStore();
 
   const handleCreateNamedVersion = () => {
@@ -63,7 +65,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCompare, onOpenPrint }) =>
             <div className="flex items-center gap-2">
               <span className="font-extrabold text-sm tracking-tight text-white">OrgFlow Studio</span>
               <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/80">
-                Spike Prototype
+                Official Baseline View
               </span>
             </div>
             <div className="text-xs text-slate-400 font-medium truncate max-w-[280px]">
@@ -73,23 +75,28 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCompare, onOpenPrint }) =>
         </div>
 
         <div className="flex items-center gap-2 pl-4 border-l border-slate-800">
-          <span className="text-xs text-slate-400">Version:</span>
+          <span className="text-xs text-slate-400">Mode:</span>
           <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-slate-800 border border-slate-700 text-emerald-300 flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
             {currentVersionName}
           </span>
+          {sourceSnapshotMeta && (
+            <span className="text-[10px] font-mono text-slate-500 hidden xl:inline" title={sourceSnapshotMeta.snapshotId}>
+              Hash: {sourceSnapshotMeta.treeHash.substring(0, 8)}...
+            </span>
+          )}
           {versions.size > 0 && (
             <select
               onChange={(e) => {
                 if (e.target.value === 'CURRENT') {
-                  initializeBaseline();
+                  initializeCurrentOrganization();
                 } else {
                   loadVersionSnapshot(e.target.value);
                 }
               }}
               className="bg-slate-800 text-slate-200 text-xs px-2 py-1 rounded border border-slate-700 outline-none"
             >
-              <option value="CURRENT">Working Draft</option>
+              <option value="CURRENT">Official Kintone Live</option>
               {Array.from(versions.keys()).map(v => (
                 <option key={v} value={v}>Snapshot {v}</option>
               ))}
@@ -99,6 +106,14 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCompare, onOpenPrint }) =>
       </div>
 
       <div className="flex items-center gap-3">
+        <button
+          onClick={() => initializeCurrentOrganization()}
+          title="Refresh official organization data from Kintone"
+          className="p-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-lg transition-colors"
+        >
+          <RefreshCw className="w-4 h-4" />
+        </button>
+
         <div className="flex items-center bg-slate-800 p-0.5 rounded-lg border border-slate-700">
           <button
             onClick={undo}

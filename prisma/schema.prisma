@@ -1,0 +1,129 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// -----------------------------------------------------------------------------
+// Kintone Source Snapshot (Immutable Historical Audit & Baseline)
+// -----------------------------------------------------------------------------
+model SourceSnapshot {
+  id               String   @id @default(uuid())
+  loadedAt         DateTime @default(now())
+  app53RecordCount Int
+  app791RecordCount Int
+  app792RecordCount Int
+  revisionsJson    String   // JSON string of app revisions
+  checksum         String   // SHA-256 invariant tree hash
+  snapshotPayload  String   // Normalized JSON payload of orgUnits, positions, assignments, employees
+  createdAt        DateTime @default(now())
+}
+
+// -----------------------------------------------------------------------------
+// Employee Cache (Read-only copy from App 53 without sensitive compensation data)
+// -----------------------------------------------------------------------------
+model EmployeeCache {
+  id            String   @id // Kintone Record ID or employeeId
+  employeeCode  String   @unique
+  nameTH        String
+  nameEN        String
+  nickname      String?
+  departmentId  String?
+  section       String?
+  team          String?
+  positionTitle String?
+  status        String   @default("Active")
+  branch        String?
+  updatedAt     DateTime @updatedAt
+}
+
+// -----------------------------------------------------------------------------
+// Organization Units (Departments, Sections, Teams, Functions)
+// -----------------------------------------------------------------------------
+model OrganizationUnit {
+  code        String   @id
+  name        String
+  type        String   // COMPANY, DIVISION, DEPARTMENT, SECTION, TEAM, SUB-TEAM, FUNCTION
+  level       Int
+  parentCode  String?
+  isOverlay   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// -----------------------------------------------------------------------------
+// Positions (Independent of Employees, Supports VACANT lifecycle)
+// -----------------------------------------------------------------------------
+model Position {
+  id                  String   @id @default(uuid())
+  code                String   @unique
+  title               String
+  orgUnitCode         String
+  reportsToPositionId String?
+  lifecycle           String   @default("ACTIVE") // PLANNED, ACTIVE, VACANT, FROZEN, CLOSED
+  effectiveFrom       String?
+  effectiveTo         String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+// -----------------------------------------------------------------------------
+// Employee Assignments
+// -----------------------------------------------------------------------------
+model Assignment {
+  id            String   @id @default(uuid())
+  positionId    String
+  employeeId    String
+  isPrimary     Boolean  @default(true)
+  effectiveFrom String?
+  effectiveTo   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// -----------------------------------------------------------------------------
+// Organization Plans & Versioning
+// -----------------------------------------------------------------------------
+model OrganizationPlan {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  status      String        @default("ACTIVE")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  versions    PlanVersion[]
+}
+
+model PlanVersion {
+  id            String           @id @default(uuid())
+  planId        String
+  versionNumber String           // V1, V2, V3, etc.
+  status        String           @default("DRAFT") // DRAFT, APPROVED_LOCKED, SYNCED, etc.
+  effectiveDate String
+  createdAt     DateTime         @default(now())
+  plan          OrganizationPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  snapshot      VersionSnapshot?
+}
+
+model VersionSnapshot {
+  id                   String      @id @default(uuid())
+  versionId            String      @unique
+  snapshotPayloadJson  String      // Frozen complete JSON
+  treeHash             String
+  createdAt            DateTime    @default(now())
+  version              PlanVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+}
+
+// -----------------------------------------------------------------------------
+// Audit Events
+// -----------------------------------------------------------------------------
+model AuditEvent {
+  id          String   @id @default(uuid())
+  action      String   // LOAD_KINTONE, CREATE_VERSION, MOVE_EMPLOYEE, etc.
+  actor       String   @default("HR_USER")
+  detailsJson String
+  createdAt   DateTime @default(now())
+}

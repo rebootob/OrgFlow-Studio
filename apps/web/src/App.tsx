@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -31,7 +31,7 @@ export function App() {
     positions,
     assignments,
     employees,
-    initializeBaseline,
+    initializeCurrentOrganization,
     undo,
     redo,
     activeCompareVersion,
@@ -44,10 +44,10 @@ export function App() {
   const [isCompareOpen, setIsCompareOpen] = useState(false);
   const [isPrintOpen, setIsPrintOpen] = useState(false);
 
-  // 1. Initial Load Baseline
+  // 1. Initial Load Current Organization from API / Baseline
   useEffect(() => {
-    initializeBaseline();
-  }, [initializeBaseline]);
+    initializeCurrentOrganization();
+  }, [initializeCurrentOrganization]);
 
   // 2. Compute ELK Layout whenever data changes
   const applyLayout = useCallback(async () => {
@@ -89,17 +89,14 @@ export function App() {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-slate-950 overflow-hidden text-slate-100">
-      {/* Header Bar */}
       <Header
         onOpenCompare={() => setIsCompareOpen(true)}
         onOpenPrint={() => setIsPrintOpen(true)}
       />
 
-      {/* Main Workspace: Sidebar + Canvas */}
       <div className="flex-1 flex overflow-hidden relative">
         <Sidebar />
 
-        {/* Center Canvas */}
         <main className="flex-1 relative bg-slate-950">
           {isLayouting && (
             <div className="absolute top-4 left-4 z-20 px-3 py-1.5 bg-slate-900/90 border border-slate-700 text-xs font-semibold text-emerald-400 rounded-lg flex items-center gap-2 shadow-xl backdrop-blur-md">
@@ -130,7 +127,6 @@ export function App() {
         </main>
       </div>
 
-      {/* Modals */}
       <CompareModal
         isOpen={isCompareOpen}
         onClose={() => setIsCompareOpen(false)}

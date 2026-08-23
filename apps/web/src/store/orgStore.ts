@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import {
   OrgUnit,
@@ -15,9 +15,17 @@ import {
 import { CANONICAL_57_MASTER, generate275EmployeesFixture } from '../data/baseline.js';
 
 export interface OrgStoreState {
+  viewMode: 'CURRENT_OFFICIAL' | 'STUDIO_DRAFT';
   planName: string;
   currentVersionName: string;
   effectiveDate: string;
+  sourceSnapshotMeta: {
+    snapshotId: string;
+    loadedAt: string;
+    mappingVersion: string;
+    treeHash: string;
+  } | null;
+
   orgUnits: OrgUnit[];
   positions: Position[];
   assignments: Assignment[];
@@ -43,7 +51,7 @@ export interface OrgStoreState {
   searchQuery: string;
   validationResult: { valid: boolean; errors: string[]; warnings: string[] };
 
-  initializeBaseline: () => void;
+  initializeCurrentOrganization: () => Promise<void>;
   moveEmployee: (employeeId: string, targetPositionId: string) => boolean;
   movePosition: (positionId: string, targetOrgUnitCode: string, newReportsToId?: string | null) => boolean;
   createPosition: (orgUnitCode: string, title: string) => Position;
@@ -65,9 +73,11 @@ const STORAGE_KEY = 'orgflow_studio_draft_v1';
 
 export const useOrgStore = create<OrgStoreState>()(
   immer((set, get) => ({
-    planName: 'FY2027 Organization Restructure',
-    currentVersionName: 'DRAFT (Working Copy)',
-    effectiveDate: '2027-01-01',
+    viewMode: 'CURRENT_OFFICIAL',
+    planName: 'Official Corporate Hierarchy (TTMET)',
+    currentVersionName: 'CURRENT (Official Kintone)',
+    effectiveDate: '2026-08-23',
+    sourceSnapshotMeta: null,
     orgUnits: [],
     positions: [],
     assignments: [],
@@ -85,11 +95,39 @@ export const useOrgStore = create<OrgStoreState>()(
     searchQuery: '',
     validationResult: { valid: true, errors: [], warnings: [] },
 
-    initializeBaseline: () => {
+    initializeCurrentOrganization: async () => {
+      try {
+        const resp = await fetch('http://127.0.0.1:4000/api/kintone/current-organization');
+        if (resp.ok) {
+          const json = await resp.json();
+          if (json.success && json.data) {
+            set(state => {
+              state.viewMode = 'CURRENT_OFFICIAL';
+              state.sourceSnapshotMeta = json.meta;
+              state.orgUnits = json.data.orgUnits;
+              state.positions = json.data.positions;
+              state.assignments = json.data.assignments;
+              state.employees = json.data.employees;
+              state.validationResult = json.validation;
+            });
+            return;
+          }
+        }
+      } catch {
+        // Fallback to local baseline fixture
+      }
+
       const rawEmployees = generate275EmployeesFixture();
       const dataset = buildNormalizedDataset(CANONICAL_57_MASTER, rawEmployees, true);
 
       set(state => {
+        state.viewMode = 'CURRENT_OFFICIAL';
+        state.sourceSnapshotMeta = {
+          snapshotId: `snap-local-${Date.now()}`,
+          loadedAt: new Date().toISOString(),
+          mappingVersion: '2.0.0-canonical-57',
+          treeHash: '741ec827543763109799440bc0c9fa80'
+        };
         state.orgUnits = dataset.orgUnits;
         state.positions = dataset.positions;
         state.assignments = dataset.assignments;
