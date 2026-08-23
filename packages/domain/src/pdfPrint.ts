@@ -44,8 +44,6 @@ export async function generateA3OrganizationChartPDF(
 
   // Blue Theme
   const cBlueHeader = rgb(0.2, 0.42, 0.72);
-
-  // Vacancy Theme
   const cAmberText = rgb(0.75, 0.35, 0.05);
 
   // Maps for dynamic entity lookups
@@ -68,7 +66,7 @@ export async function generateA3OrganizationChartPDF(
   const generatedDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   // ---------------------------------------------------------------------------
-  // HELPER DRAWING FUNCTIONS
+  // HELPER DRAWING FUNCTIONS (WITH HALF-PIXEL SNAPPING FOR 0.75pt STROKES)
   // ---------------------------------------------------------------------------
   const drawBox = (
     x: number,
@@ -80,10 +78,10 @@ export async function generateA3OrganizationChartPDF(
     borderWidth: number = 0.75
   ) => {
     page.drawRectangle({
-      x,
-      y,
-      width: w,
-      height: h,
+      x: Math.round(x) + 0.5,
+      y: Math.round(y) + 0.5,
+      width: Math.round(w),
+      height: Math.round(h),
       color: bgColor,
       borderColor,
       borderWidth
@@ -91,11 +89,53 @@ export async function generateA3OrganizationChartPDF(
   };
 
   const drawHLine = (x1: number, x2: number, y: number, color: any = cLine, thickness: number = 0.75) => {
-    page.drawLine({ start: { x: x1, y }, end: { x: x2, y }, color, thickness });
+    const startX = Math.round(Math.min(x1, x2)) + 0.5;
+    const endX = Math.round(Math.max(x1, x2)) + 0.5;
+    const snapY = Math.round(y) + 0.5;
+    page.drawLine({ start: { x: startX, y: snapY }, end: { x: endX, y: snapY }, color, thickness });
   };
 
   const drawVLine = (x: number, y1: number, y2: number, color: any = cLine, thickness: number = 0.75) => {
-    page.drawLine({ start: { x, y: y1 }, end: { x, y: y2 }, color, thickness });
+    const snapX = Math.round(x) + 0.5;
+    const startY = Math.round(Math.min(y1, y2)) + 0.5;
+    const endY = Math.round(Math.max(y1, y2)) + 0.5;
+    page.drawLine({ start: { x: snapX, y: startY }, end: { x: snapX, y: endY }, color, thickness });
+  };
+
+  // Reusable deterministic 1-to-many orthogonal connector builder
+  const drawOrthogonalBranch = (
+    parentCenterX: number,
+    parentBottomY: number,
+    children: { centerX: number; topY: number }[],
+    railY: number
+  ) => {
+    if (children.length === 0) return;
+
+    if (children.length === 1) {
+      const ch = children[0];
+      if (Math.abs(parentCenterX - ch.centerX) < 2) {
+        drawVLine(parentCenterX, parentBottomY, ch.topY);
+      } else {
+        drawVLine(parentCenterX, parentBottomY, railY);
+        drawHLine(parentCenterX, ch.centerX, railY);
+        drawVLine(ch.centerX, railY, ch.topY);
+      }
+      return;
+    }
+
+    const minChildX = Math.min(...children.map(c => c.centerX));
+    const maxChildX = Math.max(...children.map(c => c.centerX));
+    const fullRailMin = Math.min(parentCenterX, minChildX);
+    const fullRailMax = Math.max(parentCenterX, maxChildX);
+
+    // 1. Single Parent Stem
+    drawVLine(parentCenterX, parentBottomY, railY);
+    // 2. Single Shared Distribution Rail
+    drawHLine(fullRailMin, fullRailMax, railY);
+    // 3. Child Drops
+    children.forEach(ch => {
+      drawVLine(ch.centerX, railY, ch.topY);
+    });
   };
 
   // ---------------------------------------------------------------------------
@@ -136,7 +176,6 @@ export async function generateA3OrganizationChartPDF(
   // ---------------------------------------------------------------------------
   // 3. TOP HEADER REGION
   // ---------------------------------------------------------------------------
-  // Top Left: Logo & BCP Box
   page.drawText('TTMET', { x: 32, y: height - 42, size: 15, font: fontBold, color: cBlueHeader });
   page.drawText('Toyota Tsusho M&E (Thailand) Co.,Ltd.', { x: 95, y: height - 40, size: 8.5, font: fontBold, color: cDark });
 
@@ -194,25 +233,12 @@ export async function generateA3OrganizationChartPDF(
   page.drawText(`Rev: ${versionNumber} - ${effectiveDate}`, { x: appX + 6, y: appY + 8, size: 5.5, font: fontBold, color: cDark });
 
   // ---------------------------------------------------------------------------
-  // 4. LEVEL 2: DIVISIONS (M2 LEVEL) & BUS CONNECTORS
+  // 4. LEVEL 2: DIVISIONS (M2 LEVEL)
   // ---------------------------------------------------------------------------
-  const presCenterX = presX + presW / 2;
-  const presBottomY = presY;
-  const divBusY = 705;
-
-  drawVLine(presCenterX, presBottomY, divBusY);
-
   const div1CenterX = 285; // Machinery & Engineering
   const div2CenterX = 740; // GIFU SEIKI
   const div3CenterX = 1040; // Corporate Dept
   const divFutureCenterX = 1130; // Future VP
-
-  drawHLine(div1CenterX, divFutureCenterX, divBusY);
-
-  drawVLine(div1CenterX, divBusY, 675);
-  drawVLine(div2CenterX, divBusY, 675);
-  drawVLine(div3CenterX, divBusY, 675);
-  drawVLine(divFutureCenterX, divBusY, 675);
 
   // Machinery & Engineering Division (DIV-ME)
   const d1X = div1CenterX - 70;
@@ -246,23 +272,26 @@ export async function generateA3OrganizationChartPDF(
   page.drawText('In Future', { x: divFutureCenterX - 13, y: 663, size: 5.5, font: fontOblique, color: cGray });
   page.drawText('Vice President', { x: divFutureCenterX - 18, y: 652, size: 5.5, font: fontOblique, color: cGray });
 
+  // CONNECTORS: President -> Divisions
+  drawOrthogonalBranch(
+    presX + presW / 2,
+    presY,
+    [
+      { centerX: div1CenterX, topY: d1Y + d1H },
+      { centerX: div2CenterX, topY: d2Y + d2H },
+      { centerX: div3CenterX, topY: d3Y + d3H },
+      { centerX: divFutureCenterX, topY: 675 }
+    ],
+    706
+  );
+
   // ---------------------------------------------------------------------------
-  // 5. LEVEL 3: DEPARTMENTS (M2/H3 LEVEL) & CONNECTORS
+  // 5. LEVEL 3: DEPARTMENTS (M2/H3 LEVEL)
   // ---------------------------------------------------------------------------
-  drawVLine(div1CenterX, d1Y, 620);
-  const deptBusY = 620;
-
-  const tmt0CenterX = 105; // Machinery Dept (TMT0)
-  const tmf0CenterX = 288; // Industrial Services Dept (TMF0)
-  const tme0CenterX = 430; // Eco Energy Dept (TME0)
-  const tms0CenterX = 508; // Technical Services Dept (TMS0)
-
-  drawHLine(tmt0CenterX, tms0CenterX, deptBusY);
-
-  drawVLine(tmt0CenterX, deptBusY, 595);
-  drawVLine(tmf0CenterX, deptBusY, 595);
-  drawVLine(tme0CenterX, deptBusY, 595);
-  drawVLine(tms0CenterX, deptBusY, 595);
+  const tmt0CenterX = 105;
+  const tmf0CenterX = 288;
+  const tme0CenterX = 430;
+  const tms0CenterX = 508;
 
   // TMT0 Box
   drawBox(tmt0CenterX - 60, 560, 120, 35, cGreenBg, cGreenBorder, 0.8);
@@ -284,17 +313,31 @@ export async function generateA3OrganizationChartPDF(
   page.drawText('Tech Services (TMS0)', { x: tms0CenterX - 30, y: 584, size: 5.5, font: fontBold, color: cGreenBorder });
   page.drawText('Mr. Makino - GM', { x: tms0CenterX - 25, y: 571, size: 5.5, font: fontRegular, color: cDark });
 
+  // CONNECTORS: DIV-ME -> Departments (TMT0, TMF0, TME0, TMS0)
+  drawOrthogonalBranch(
+    div1CenterX,
+    d1Y,
+    [
+      { centerX: tmt0CenterX, topY: 595 },
+      { centerX: tmf0CenterX, topY: 595 },
+      { centerX: tme0CenterX, topY: 595 },
+      { centerX: tms0CenterX, topY: 595 }
+    ],
+    618
+  );
+
   // TMG0 Box (GIFU Mold & Engineering Dept)
-  drawVLine(div2CenterX, d2Y, 595);
   const tmg0W = 200;
   const tmg0X = div2CenterX - tmg0W / 2;
   drawBox(tmg0X, 560, tmg0W, 35, cOrangeBg, cOrangeBorder, 0.8);
   page.drawText('Mold & Engineering Department (TMG0)', { x: tmg0X + 28, y: 584, size: 7, font: fontBold, color: cOrangeBorder });
   page.drawText('Mr. Takayoshi Uchida (GM) - Mr. Hanamura (Factory Mgr)', { x: tmg0X + 12, y: 571, size: 5.5, font: fontRegular, color: cDark });
 
+  // Connector: DIV-G0 -> TMG0 (Direct Stem)
+  drawVLine(div2CenterX, d2Y, 595);
+
   // Functional Group DGM row beneath TMG0
   const fDgmY = 530;
-  drawVLine(div2CenterX, 560, fDgmY + 22);
   const gFuncs = ['Admin', 'CAD', 'Marketing', 'Production'];
   const gFuncW = 46;
   gFuncs.forEach((fn, idx) => {
@@ -304,7 +347,8 @@ export async function generateA3OrganizationChartPDF(
     page.drawText('In Future DGM', { x: fnX + 6, y: fDgmY + 4, size: 4.5, font: fontOblique, color: cGray });
   });
 
-  drawVLine(div3CenterX, d3Y, 545);
+  // Connector: TMG0 -> Functional DGM Group (Direct Stem)
+  drawVLine(div2CenterX, 560, fDgmY + 22);
 
   // ---------------------------------------------------------------------------
   // 6. LEVEL 4: SECTION MANAGERS (M3 / H3 LEVEL)
@@ -312,7 +356,6 @@ export async function generateA3OrganizationChartPDF(
   const secY = 485;
   const secH = 32;
 
-  // Single-column vertical stacking sections (M&E, Corporate) and multi-column (GIFU)
   const sections = [
     {
       parentCenterX: tmt0CenterX, code: 'TMT1', name: 'Export', head: 'Mr. Pitchayadol (Mgr)', x: 28, w: 70, theme: 'green',
@@ -387,8 +430,6 @@ export async function generateA3OrganizationChartPDF(
         { type: 'staff', title: 'Safety Officer', name: 'Ms. Penpichar' }
       ]
     },
-
-    // GIFU SEIKI: TMG1 (Die Casting - 4 columns) & TMG2 (Injection - 3 columns)
     {
       parentCenterX: div2CenterX, code: 'TMG1', name: 'Die Casting', head: 'Ms. Amporn (Mgr)', x: 546, w: 184, theme: 'orange',
       subColumns: [
@@ -455,8 +496,6 @@ export async function generateA3OrganizationChartPDF(
         }
       ]
     },
-
-    // Corporate Department Sections (TMH1, TMH2, TMH3)
     {
       parentCenterX: div3CenterX, code: 'TMH1', name: 'GA Section', head: 'Ms. Supparat (Mgr)', x: 928, w: 68, theme: 'green',
       cards: [
@@ -486,57 +525,95 @@ export async function generateA3OrganizationChartPDF(
     }
   ];
 
-  // Draw Section Busses & Section Headers
-  const parentGroups = new Map<number, typeof sections>();
+  // Draw Section Boxes
   sections.forEach(s => {
-    const list = parentGroups.get(s.parentCenterX) || [];
-    list.push(s);
-    parentGroups.set(s.parentCenterX, list);
+    const bg = s.theme === 'orange' ? cOrangeBg : cGreenBg;
+    const bd = s.theme === 'orange' ? cOrangeBorder : cGreenBorder;
+    drawBox(s.x, secY, s.w, secH, bg, bd, 0.75);
+
+    page.drawText(`${s.code} • ${s.name}`, { x: s.x + 3, y: secY + 20, size: 5.5, font: fontBold, color: bd });
+    page.drawText(s.head, { x: s.x + 3, y: secY + 9, size: 4.8, font: fontRegular, color: cDark });
   });
 
-  parentGroups.forEach((secs, pCenter) => {
-    const minX = Math.min(...secs.map(s => s.x + s.w / 2));
-    const maxX = Math.max(...secs.map(s => s.x + s.w / 2));
-    const parentBottomY = pCenter === div2CenterX ? fDgmY : (pCenter === div3CenterX ? d3Y : 560);
-    const busY = parentBottomY - 14;
+  // CONNECTORS: Parent Departments -> Section Headers (Strict Deterministic Groups)
+  // Group A: TMT0 (Machinery Dept) -> TMT1, TMT2
+  drawOrthogonalBranch(
+    tmt0CenterX,
+    560,
+    [
+      { centerX: sections[0].x + sections[0].w / 2, topY: secY + secH },
+      { centerX: sections[1].x + sections[1].w / 2, topY: secY + secH }
+    ],
+    538
+  );
 
-    drawVLine(pCenter, parentBottomY, busY);
-    drawHLine(minX, maxX, busY);
+  // Group B: TMF0 (Industrial Services Dept) -> TMF1, TMF2, TMF3
+  drawOrthogonalBranch(
+    tmf0CenterX,
+    560,
+    [
+      { centerX: sections[2].x + sections[2].w / 2, topY: secY + secH },
+      { centerX: sections[3].x + sections[3].w / 2, topY: secY + secH },
+      { centerX: sections[4].x + sections[4].w / 2, topY: secY + secH }
+    ],
+    538
+  );
 
-    secs.forEach(s => {
-      const sCenter = s.x + s.w / 2;
-      drawVLine(sCenter, busY, secY + secH);
+  // Group C: TME0 (Eco Energy Dept) -> TME1
+  drawVLine(sections[5].x + sections[5].w / 2, 560, secY + secH);
 
-      const bg = s.theme === 'orange' ? cOrangeBg : cGreenBg;
-      const bd = s.theme === 'orange' ? cOrangeBorder : cGreenBorder;
-      drawBox(s.x, secY, s.w, secH, bg, bd, 0.75);
+  // Group D: TMS0 (Technical Services Dept) -> TMS1
+  drawVLine(sections[6].x + sections[6].w / 2, 560, secY + secH);
 
-      page.drawText(`${s.code} • ${s.name}`, { x: s.x + 3, y: secY + 20, size: 5.5, font: fontBold, color: bd });
-      page.drawText(s.head, { x: s.x + 3, y: secY + 9, size: 4.8, font: fontRegular, color: cDark });
-    });
-  });
+  // Group E: TMG0 Functional DGM -> TMG1, TMG2
+  drawOrthogonalBranch(
+    div2CenterX,
+    fDgmY,
+    [
+      { centerX: sections[7].x + sections[7].w / 2, topY: secY + secH },
+      { centerX: sections[8].x + sections[8].w / 2, topY: secY + secH }
+    ],
+    524
+  );
+
+  // Group F: TMH0 (Corporate Dept) -> TMH1, TMH2, TMH3 (Single clean branch, zero duplicate lines)
+  drawOrthogonalBranch(
+    div3CenterX,
+    d3Y,
+    [
+      { centerX: sections[9].x + sections[9].w / 2, topY: secY + secH },
+      { centerX: sections[10].x + sections[10].w / 2, topY: secY + secH },
+      { centerX: sections[11].x + sections[11].w / 2, topY: secY + secH }
+    ],
+    578
+  );
 
   // ---------------------------------------------------------------------------
-  // 7. LEVEL 5, 6, 7: DEDICATED VERTICAL CARDS (ZERO COLLISION, 100% READABLE)
+  // 7. LEVEL 5, 6, 7: DEDICATED VERTICAL CARDS & SUB-COLUMN CONNECTORS
   // ---------------------------------------------------------------------------
   sections.forEach(s => {
     const sCenter = s.x + s.w / 2;
 
     if (s.subColumns && s.subColumns.length > 0) {
-      // Multi-column GIFU Sections
+      // Multi-column GIFU Sections (TMG1, TMG2)
       const colGap = 4;
       let curX = s.x;
 
-      drawVLine(sCenter, secY, secY - 8);
-      const firstColCenter = s.x + s.subColumns[0].w / 2;
-      const lastColCenter = s.x + s.w - s.subColumns[s.subColumns.length - 1].w / 2;
-      drawHLine(firstColCenter, lastColCenter, secY - 8);
+      const subColBranches: { centerX: number; topY: number }[] = [];
+      s.subColumns.forEach(sc => {
+        subColBranches.push({ centerX: curX + sc.w / 2, topY: secY - 14 });
+        curX += (sc.w + colGap);
+      });
 
+      // Orthogonal branch from Section Header to Sub-Columns
+      drawOrthogonalBranch(sCenter, secY, subColBranches, secY - 7);
+
+      // Render cards within each sub-column
+      curX = s.x;
       s.subColumns.forEach(sc => {
         const colCenter = curX + sc.w / 2;
-        drawVLine(colCenter, secY - 8, secY - 14);
-
         let cardY = secY - 14;
+
         sc.cards.forEach(cd => {
           const cardH = 24;
           cardY -= (cardH + 6);
@@ -544,11 +621,11 @@ export async function generateA3OrganizationChartPDF(
           if (cd.type === 'team') {
             drawBox(curX, cardY, sc.w, cardH, rgb(0.97, 0.99, 0.97), cOrangeBorder, 0.6);
             page.drawText(cd.title, { x: curX + 2, y: cardY + 14, size: 4.5, font: fontBold, color: cDark });
-            page.drawText(cd.lead || '', { x: curX + 2, y: cardY + 5, size: 4, font: fontRegular, color: cGray });
+            page.drawText(cd.lead ?? '', { x: curX + 2, y: cardY + 5, size: 4, font: fontRegular, color: cGray });
           } else {
             drawBox(curX, cardY, sc.w, cardH, rgb(1, 1, 1), cLightGray, 0.55);
             page.drawText(cd.title, { x: curX + 2, y: cardY + 14, size: 4.2, font: fontBold, color: cDark });
-            page.drawText(cd.name || '', { x: curX + 2, y: cardY + 5, size: 4, font: fontRegular, color: cGray });
+            page.drawText(cd.name ?? '', { x: curX + 2, y: cardY + 5, size: 4, font: fontRegular, color: cGray });
           }
 
           drawVLine(colCenter, cardY + cardH + 6, cardY + cardH, cLightGray, 0.4);
