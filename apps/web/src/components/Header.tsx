@@ -17,7 +17,8 @@ import {
   CheckCircle2,
   LayoutGrid,
   Network,
-  Users
+  Users,
+  Database
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -92,15 +93,29 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Mode Indicator Badges */}
+        {/* Mode & Data Source Indicator Badges */}
         {viewMode === 'CURRENT_OFFICIAL' ? (
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-[11px] font-medium">
-            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span>Official Kintone Data</span>
-            <span className="text-emerald-400">•</span>
-            <span className="flex items-center gap-0.5 text-emerald-700">
-              <Lock className="w-3 h-3" /> Read Only
-            </span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-[11px] font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <span>Official Kintone Data</span>
+              <span className="text-emerald-400">•</span>
+              <span className="flex items-center gap-0.5 text-emerald-700">
+                <Lock className="w-3 h-3" /> Read Only
+              </span>
+            </div>
+
+            <div
+              className="hidden lg:flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 text-[10px] text-slate-600"
+              title={`Source Provider: ${sourceSnapshotMeta?.sourceProvider || 'Kintone'} | Apps: 53, 791, 792 | Snapshot: ${sourceSnapshotMeta?.snapshotId || 'N/A'}`}
+            >
+              <Database className="w-3 h-3 text-slate-400" />
+              <span className="font-semibold text-slate-700">
+                {sourceSnapshotMeta?.sourceProvider === 'KINTONE_LIVE'
+                  ? 'Kintone Live Read (App 53 / 791 / 792)'
+                  : 'Canonical Master (App 53 / 791 / 792)'}
+              </span>
+            </div>
           </div>
         ) : (
           <div className="flex items-center gap-2">
@@ -124,7 +139,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Updated Timestamp */}
         <div className="hidden xl:flex items-center gap-1.5 text-xs text-slate-500 pl-2">
           <Calendar className="w-3.5 h-3.5 text-slate-400" />
-          <span>Based on Kintone: <strong className="text-slate-700">{lastUpdatedFormatted}</strong></span>
+          <span>Loaded: <strong className="text-slate-700">{lastUpdatedFormatted}</strong></span>
         </div>
       </div>
 

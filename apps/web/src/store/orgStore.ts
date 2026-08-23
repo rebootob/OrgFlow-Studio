@@ -30,6 +30,8 @@ export interface OrgStoreState {
   sourceSnapshotMeta: {
     snapshotId: string;
     loadedAt: string;
+    sourceProvider?: string;
+    environment?: string;
     mappingVersion: string;
     treeHash: string;
   } | null;

@@ -38,6 +38,8 @@ export interface KintoneRawRecord {
 export interface KintoneSourceSnapshotMeta {
   snapshotId: string;
   loadedAt: string;
+  sourceProvider: 'KINTONE_LIVE' | 'CANONICAL_AUTHENTIC_DEVELOPMENT';
+  environment: string;
   app53Count: number;
   app791Count: number;
   app792Count: number;
