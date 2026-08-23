@@ -4,8 +4,21 @@
 Design intuitive, friendly, and readable organization chart experiences tailored specifically for HR professionals, avoiding cognitive overload while maintaining complete topology integrity.
 
 ## Core UX Principles
-1. **Light & Calm Theme:** Soft neutral backgrounds (`bg-slate-50`), rounded cards, gentle borders, and subtle shadows create a professional corporate atmosphere.
-2. **Progressive Disclosure:** Primary nodes on the canvas display only essential information (Position Title, Incumbent Name, Employee Code, Department). Detailed metadata (reports to, contact info, lifecycle) is revealed in a dedicated **Right Detail Panel** on click.
-3. **Search-to-Focus Workflow:** Searching an employee or position instantly highlights the result and animates the React Flow viewport (`setCenter` with zoom ~1.0) directly to the target card without manual hunting.
-4. **Collapsible Workspace:** Sidebars and detail drawers can collapse smoothly to maximize canvas screen estate on standard 1080p laptop/desktop displays.
-5. **Clear Semantic Colors:** Green for active/healthy, amber for vacancies, blue for selections, and red strictly for validation errors.
+
+### 1. Summary on Canvas, Detail on Demand
+- **Canvas Nodes**: Function as high-level summary cards (Organization Unit, Leader/Head, and aggregate metrics). Standardized card width (`280px`) with **zero internal scrollbars**.
+- **Right Detail Panel**: Acts as the comprehensive information area (complete position roster, employee codes, status, and draft modification actions).
+
+### 2. Multi-Density View Modes
+To support different executive and operational contexts without changing underlying data:
+- **Overview Mode**: Executive high-level view showing only Unit Name, Code/Type, and Staff/Position/Vacancy counts. Allows fitting maximum units on screen.
+- **Organization Mode (Default HR View)**: Standard view showing Unit Name, Type, Head/Leader with Position title (or `VACANT LEADER` / `Head not defined`), and summary metrics bar.
+- **People Mode**: Same compact card footprint with a preview of up to 2-3 key personnel plus a `+ N more` indicator.
+
+### 3. Progressive Disclosure & Focus Branch
+- **Focus Branch / Drill-Down**: Double-clicking a unit or clicking `[ Drill in › ]` isolates the selected subtree and its direct reporting branches, updating the breadcrumb trail.
+- **Search-to-Focus Workflow**: Searching an employee or position highlights the result, auto-resets drill down if needed, and animates the React Flow viewport (`setCenter` with zoom ~1.1).
+
+### 4. Gentle Semantic Indicators
+- **Vacancies**: Represented by a gentle amber badge `⚠ N Vacancy` without turning the entire card orange.
+- **Draft Status**: Small discrete badges (`NEW`, `CLOSING`) distinguish draft changes from official Kintone baseline data.

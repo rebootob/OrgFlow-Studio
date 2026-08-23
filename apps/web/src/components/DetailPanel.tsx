@@ -5,7 +5,6 @@ import {
   AlertCircle,
   CheckCircle2,
   Layers,
-  ChevronRight,
   Move,
   PlusCircle,
   Archive,
@@ -13,7 +12,8 @@ import {
   UserCheck,
   Briefcase,
   UserMinus,
-  Sparkles
+  Sparkles,
+  AlertTriangle
 } from 'lucide-react';
 import { MoveOrgModal } from './MoveOrgModal.js';
 import { AddOrgModal } from './AddOrgModal.js';
@@ -36,6 +36,8 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({ onFocusNode }) => {
     selectedPositionId,
     setSelectedOrgCode,
     setSelectedPositionId,
+    getRollupStats,
+    getOrgLeader,
     vacatePosition,
     closePosition,
     removeDraftUnit
@@ -62,6 +64,10 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({ onFocusNode }) => {
 
   const isDraftMode = viewMode === 'DRAFT';
 
+  const rollup = currentOrg ? getRollupStats(currentOrg.code) : null;
+  const leaderInfo = currentOrg ? getOrgLeader(currentOrg.code) : null;
+  const orgPositions = currentOrg ? positions.filter(p => p.orgUnitCode === currentOrg.code && p.lifecycle !== 'CLOSED') : [];
+
   const handleClose = () => {
     setSelectedOrgCode(null);
     setSelectedPositionId(null);
@@ -76,13 +82,13 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({ onFocusNode }) => {
 
   return (
     <>
-      <aside className="w-88 bg-white border-l border-slate-200 h-full flex flex-col shadow-lg select-none z-20 animate-in slide-in-from-right duration-200">
+      <aside className="w-96 bg-white border-l border-slate-200 h-full flex flex-col shadow-lg select-none z-20 animate-in slide-in-from-right duration-200">
         {/* Panel Header */}
         <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
           <div>
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                {currentPos ? 'Position Inspector' : 'Organization Unit'}
+                {currentPos ? 'Position Inspector' : 'Organization Details'}
               </span>
               {currentOrg?.status === 'NEW' && (
                 <span className="text-[10px] px-1.5 py-0.2 bg-indigo-50 text-indigo-700 font-bold border border-indigo-200 rounded">
@@ -107,18 +113,17 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({ onFocusNode }) => {
           </button>
         </div>
 
-        {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-5 text-xs text-slate-600">
-          {/* DRAFT ACTIONS SECTION (Visible only in DRAFT mode) */}
+        {/* Content Body (Scrollable Detail Area) */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs text-slate-600">
+          {/* DRAFT ACTIONS (Visible only in DRAFT mode) */}
           {isDraftMode && (
-            <div className="p-3.5 bg-indigo-50/60 border border-indigo-100 rounded-xl space-y-2">
+            <div className="p-3 bg-indigo-50/60 border border-indigo-100 rounded-xl space-y-2">
               <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-900 flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-indigo-600" /> Draft Operations
+                <Sparkles className="w-3 h-3 text-indigo-600" /> Draft Actions
               </span>
 
-              {/* If Org Unit selected */}
               {!currentPos && currentOrg && (
-                <div className="grid grid-cols-2 gap-1.5 pt-1">
+                <div className="grid grid-cols-2 gap-1.5 pt-0.5">
                   <button
                     onClick={() => setIsMoveOrgOpen(true)}
                     className="p-2 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg font-semibold text-indigo-950 flex items-center justify-center gap-1 transition-colors"
@@ -155,9 +160,8 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({ onFocusNode }) => {
                 </div>
               )}
 
-              {/* If Position selected */}
               {currentPos && (
-                <div className="grid grid-cols-2 gap-1.5 pt-1">
+                <div className="grid grid-cols-2 gap-1.5 pt-0.5">
                   {currentEmp && (
                     <button
                       onClick={() => setIsMoveEmpOpen(true)}
@@ -185,9 +189,136 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({ onFocusNode }) => {
             </div>
           )}
 
-          {/* If Position is Selected */}
+          {/* VIEW A: ORGANIZATION UNIT FULL DETAILS */}
+          {!currentPos && currentOrg && rollup && (
+            <div className="space-y-4">
+              {/* Organization Metadata Card */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
+                <div className="flex justify-between py-1 border-b border-slate-200">
+                  <span className="text-slate-500">Unit Name:</span>
+                  <strong className="text-slate-900 text-right max-w-[200px] truncate">{currentOrg.name}</strong>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-200">
+                  <span className="text-slate-500">Type / Level:</span>
+                  <span className="font-semibold text-slate-800">{currentOrg.type} (Level {currentOrg.level})</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-200">
+                  <span className="text-slate-500">Code:</span>
+                  <span className="font-mono font-bold text-indigo-700">{currentOrg.code}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-200">
+                  <span className="text-slate-500">Parent Organization:</span>
+                  <span className="font-mono text-slate-700">{currentOrg.parentCode || 'ROOT'}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-200">
+                  <span className="text-slate-500">Head / Leader:</span>
+                  <span className="font-semibold text-slate-900">
+                    {leaderInfo?.employee ? leaderInfo.employee.nameEN : leaderInfo?.isVacant ? 'VACANT' : 'Not Defined'}
+                  </span>
+                </div>
+                <div className="flex justify-between py-1">
+                  <span className="text-slate-500">Head Position:</span>
+                  <span className="text-slate-700">{leaderInfo?.position?.title || 'N/A'}</span>
+                </div>
+              </div>
+
+              {/* Metrics Summary Strip */}
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="p-2 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="text-xs font-bold text-slate-900">{rollup.totalHeadcount}</div>
+                  <div className="text-[10px] text-slate-500">Staff Members</div>
+                </div>
+                <div className="p-2 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="text-xs font-bold text-slate-900">{rollup.totalPositions}</div>
+                  <div className="text-[10px] text-slate-500">Positions</div>
+                </div>
+                <div className={`p-2 border rounded-xl ${
+                  rollup.vacantCount > 0
+                    ? 'bg-amber-50 border-amber-200 text-amber-900'
+                    : 'bg-slate-50 border-slate-200 text-slate-500'
+                }`}>
+                  <div className="text-xs font-bold">{rollup.vacantCount}</div>
+                  <div className="text-[10px]">Vacancies</div>
+                </div>
+              </div>
+
+              {/* Full Positions and Incumbents List */}
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wider flex items-center gap-1.5">
+                    <Briefcase className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Positions in {currentOrg.code} ({orgPositions.length})</span>
+                  </h4>
+                </div>
+
+                {orgPositions.length === 0 ? (
+                  <div className="p-4 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center text-slate-400 italic">
+                    No assigned positions in this unit
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {orgPositions.map(pos => {
+                      const asg = asgMap.get(pos.id);
+                      const emp = asg ? empMap.get(asg.employeeId) : null;
+                      const isVacant = pos.lifecycle === 'VACANT' || !emp;
+
+                      return (
+                        <div
+                          key={pos.id}
+                          onClick={() => setSelectedPositionId(pos.id)}
+                          className={`p-3 rounded-xl border text-xs cursor-pointer transition-all hover:border-slate-300 ${
+                            isVacant
+                              ? 'bg-amber-50/50 border-amber-200/90'
+                              : 'bg-white border-slate-200 shadow-2xs'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-bold text-slate-900 text-xs truncate max-w-[200px]">
+                              {pos.title}
+                            </span>
+                            <span className="font-mono text-[10px] text-slate-400">{pos.code}</span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px]">
+                            {emp ? (
+                              <div className="flex items-center gap-1.5 text-slate-700">
+                                <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-[9px] font-bold">
+                                  {emp.nameEN.charAt(0)}
+                                </div>
+                                <span className="font-medium">{emp.nameEN}</span>
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-amber-700 font-bold text-[10px]">
+                                <AlertTriangle className="w-3 h-3 text-amber-500" />
+                                VACANT POSITION
+                              </span>
+                            )}
+
+                            {emp && (
+                              <span className="font-mono text-[10px] text-slate-400">
+                                {emp.employeeCode}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* VIEW B: POSITION & EMPLOYEE INSPECTION */}
           {currentPos && (
             <div className="space-y-4">
+              <button
+                onClick={() => setSelectedPositionId(null)}
+                className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1"
+              >
+                ← Back to {currentPos.orgUnitCode} Unit Details
+              </button>
+
               {/* Status Card */}
               <div className={`p-3.5 rounded-xl border flex items-center justify-between ${
                 currentPos.lifecycle === 'VACANT' || !currentEmp
@@ -255,7 +386,7 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({ onFocusNode }) => {
               )}
 
               {/* Position Properties */}
-              <div className="space-y-2 pt-2">
+              <div className="space-y-2 pt-1">
                 <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wider">Position Information</h4>
                 <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2 text-[11px]">
                   <div className="flex justify-between py-0.5 border-b border-slate-50">
@@ -275,7 +406,7 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({ onFocusNode }) => {
                 </div>
               </div>
 
-              {/* Action Focus Button */}
+              {/* Center Canvas Action */}
               <button
                 onClick={() => onFocusNode(currentPos.orgUnitCode)}
                 className="w-full py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
@@ -284,66 +415,10 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({ onFocusNode }) => {
               </button>
             </div>
           )}
-
-          {/* If Org Unit only is Selected */}
-          {!currentPos && currentOrg && (
-            <div className="space-y-4">
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
-                <div className="flex justify-between py-0.5 border-b border-slate-200">
-                  <span className="text-slate-500">Unit Code:</span>
-                  <strong className="font-mono text-slate-900">{currentOrg.code}</strong>
-                </div>
-                <div className="flex justify-between py-0.5 border-b border-slate-200">
-                  <span className="text-slate-500">Level / Type:</span>
-                  <strong className="text-slate-800">Level {currentOrg.level} • {currentOrg.type}</strong>
-                </div>
-                <div className="flex justify-between py-0.5 border-b border-slate-200">
-                  <span className="text-slate-500">Parent Unit:</span>
-                  <span className="font-mono text-slate-700">{currentOrg.parentCode || 'ROOT'}</span>
-                </div>
-                <div className="flex justify-between py-0.5">
-                  <span className="text-slate-500">Total Positions:</span>
-                  <strong className="text-emerald-700">
-                    {positions.filter(p => p.orgUnitCode === currentOrg.code).length} Positions
-                  </strong>
-                </div>
-              </div>
-
-              {/* Positions List in this Org Unit */}
-              <div className="space-y-2">
-                <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wider">
-                  Positions in {currentOrg.code}
-                </h4>
-                <div className="space-y-1.5">
-                  {positions
-                    .filter(p => p.orgUnitCode === currentOrg.code && p.lifecycle !== 'CLOSED')
-                    .map(p => {
-                      const asg = asgMap.get(p.id);
-                      const emp = asg ? empMap.get(asg.employeeId) : null;
-                      return (
-                        <div
-                          key={p.id}
-                          onClick={() => setSelectedPositionId(p.id)}
-                          className="p-2.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg cursor-pointer flex items-center justify-between text-xs transition-colors"
-                        >
-                          <div>
-                            <div className="font-semibold text-slate-800">{p.title}</div>
-                            <div className="text-[11px] text-slate-400">
-                              {emp ? `${emp.nameEN} (${emp.employeeCode})` : 'VACANT'}
-                            </div>
-                          </div>
-                          <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </aside>
 
-      {/* Modals for Draft Operations */}
+      {/* Modals */}
       <MoveOrgModal
         isOpen={isMoveOrgOpen}
         onClose={() => setIsMoveOrgOpen(false)}

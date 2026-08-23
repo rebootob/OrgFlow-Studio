@@ -9,6 +9,7 @@ export interface LayoutOptions {
   nodeSpacing?: number;
   levelSpacing?: number;
   rootOrgCode?: string | null;
+  canvasDisplayMode?: 'OVERVIEW' | 'ORGANIZATION' | 'PEOPLE';
 }
 
 export async function layoutOrgChart(
@@ -49,17 +50,21 @@ export async function layoutOrgChart(
     orgPositionsMap.set(p.orgUnitCode, list);
   });
 
+  // Standardized node dimensions based on Summary on Canvas principle
+  const nodeWidth = 280;
+  let nodeHeight = 155; // Default ORGANIZATION mode
+  if (options.canvasDisplayMode === 'OVERVIEW') {
+    nodeHeight = 115;
+  } else if (options.canvasDisplayMode === 'PEOPLE') {
+    nodeHeight = 185;
+  }
+
   // 1. Build ELK graph for Org Units
-  const elkChildren: ElkNode[] = visibleOrgs.map(org => {
-    const orgPosList = orgPositionsMap.get(org.code) || [];
-    const width = 360;
-    const height = Math.max(140, 85 + orgPosList.length * 85);
-    return {
-      id: org.code,
-      width,
-      height
-    };
-  });
+  const elkChildren: ElkNode[] = visibleOrgs.map(org => ({
+    id: org.code,
+    width: nodeWidth,
+    height: nodeHeight
+  }));
 
   const visibleOrgCodes = new Set(visibleOrgs.map(o => o.code));
   const elkEdges = visibleOrgs
@@ -75,8 +80,8 @@ export async function layoutOrgChart(
     layoutOptions: {
       'elk.algorithm': 'layered',
       'elk.direction': options.direction || 'DOWN',
-      'elk.spacing.nodeNode': String(options.nodeSpacing || 70),
-      'elk.layered.spacing.nodeNodeBetweenLayers': String(options.levelSpacing || 110),
+      'elk.spacing.nodeNode': String(options.nodeSpacing || 48), // 30% reduction from 70
+      'elk.layered.spacing.nodeNodeBetweenLayers': String(options.levelSpacing || 80), // 27% reduction from 110
       'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
       'elk.alignment': 'CENTER'
     },
@@ -112,13 +117,13 @@ export async function layoutOrgChart(
           positions: orgPositionsWithDetails
         },
         style: {
-          width: elkChild.width || 360
+          width: nodeWidth
         }
       });
     }
   }
 
-  // 3. React Flow Edges
+  // 3. React Flow Edges (clean, subtle stroke)
   for (const org of visibleOrgs) {
     if (org.parentCode && visibleOrgCodes.has(org.parentCode)) {
       edges.push({
@@ -127,7 +132,7 @@ export async function layoutOrgChart(
         target: org.code,
         type: 'smoothstep',
         animated: false,
-        style: { stroke: '#94a3b8', strokeWidth: 2 }
+        style: { stroke: '#cbd5e1', strokeWidth: 1.5 }
       });
     }
   }

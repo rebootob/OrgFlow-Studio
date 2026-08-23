@@ -14,7 +14,10 @@ import {
   PlusCircle,
   FileEdit,
   Eye,
-  CheckCircle2
+  CheckCircle2,
+  LayoutGrid,
+  Network,
+  Users
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -32,6 +35,8 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const {
     viewMode,
+    canvasDisplayMode,
+    setCanvasDisplayMode,
     draftName,
     sourceSnapshotMeta,
     createDraft,
@@ -123,6 +128,48 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
+      {/* Middle: Canvas Display Mode Segment Switcher */}
+      <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">
+        <button
+          onClick={() => setCanvasDisplayMode('OVERVIEW')}
+          className={`px-3 py-1 rounded-lg flex items-center gap-1.5 transition-all ${
+            canvasDisplayMode === 'OVERVIEW'
+              ? 'bg-white text-slate-900 shadow-xs'
+              : 'hover:text-slate-900'
+          }`}
+          title="Overview Mode (Compact high-level metrics)"
+        >
+          <LayoutGrid className="w-3.5 h-3.5 text-slate-500" />
+          <span>Overview</span>
+        </button>
+
+        <button
+          onClick={() => setCanvasDisplayMode('ORGANIZATION')}
+          className={`px-3 py-1 rounded-lg flex items-center gap-1.5 transition-all ${
+            canvasDisplayMode === 'ORGANIZATION'
+              ? 'bg-white text-emerald-900 shadow-xs'
+              : 'hover:text-slate-900'
+          }`}
+          title="Organization Mode (Default HR View: Head & Summary)"
+        >
+          <Network className="w-3.5 h-3.5 text-emerald-600" />
+          <span>Organization</span>
+        </button>
+
+        <button
+          onClick={() => setCanvasDisplayMode('PEOPLE')}
+          className={`px-3 py-1 rounded-lg flex items-center gap-1.5 transition-all ${
+            canvasDisplayMode === 'PEOPLE'
+              ? 'bg-white text-indigo-900 shadow-xs'
+              : 'hover:text-slate-900'
+          }`}
+          title="People Mode (Compact Personnel Preview)"
+        >
+          <Users className="w-3.5 h-3.5 text-indigo-600" />
+          <span>People</span>
+        </button>
+      </div>
+
       {/* Right: Primary Actions */}
       <div className="flex items-center gap-2">
         {/* Toggle Mode: View Current vs Edit Draft */}
@@ -181,7 +228,7 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={onFocusSelected}
           disabled={!selectedOrgCode && !selectedPositionId}
           title="Zoom in to selected department or position"
-          className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium rounded-lg flex items-center gap-1.5 transition-colors"
+          className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium rounded-lg flex items-center gap-1.5 disabled:opacity-40 disabled:hover:bg-slate-50 transition-colors"
         >
           <Layers className="w-3.5 h-3.5 text-slate-500" />
           <span>Focus Selected</span>

@@ -17,8 +17,11 @@ import {
 } from '@orgflow/domain';
 import { CANONICAL_57_MASTER, generate275EmployeesFixture } from '../data/baseline.js';
 
+export type CanvasDisplayMode = 'OVERVIEW' | 'ORGANIZATION' | 'PEOPLE';
+
 export interface OrgStoreState {
   viewMode: 'CURRENT_OFFICIAL' | 'DRAFT';
+  canvasDisplayMode: CanvasDisplayMode;
   draftName: string;
   planName: string;
   currentVersionName: string;
@@ -77,12 +80,14 @@ export interface OrgStoreState {
   createDraft: (customName?: string) => void;
   switchToCurrent: () => void;
   switchToDraft: () => void;
+  setCanvasDisplayMode: (mode: CanvasDisplayMode) => void;
 
   drillDownToOrg: (orgCode: string) => void;
   drillUpToParent: () => void;
   resetDrillDownToRoot: () => void;
   getBreadcrumbTrail: () => Array<{ code: string; name: string }>;
-  getRollupStats: (orgCode: string) => { totalHeadcount: number; totalPositions: number; childUnitCount: number };
+  getRollupStats: (orgCode: string) => { totalHeadcount: number; totalPositions: number; childUnitCount: number; vacantCount: number };
+  getOrgLeader: (orgCode: string) => { position: Position | null; employee: Employee | null; isVacant: boolean };
 
   // Domain Commands
   moveOrgUnit: (unitCode: string, newParentCode: string) => { success: boolean; error?: string };
@@ -116,6 +121,7 @@ const DRAFT_STORAGE_KEY = 'orgflow_studio_working_draft_v1';
 export const useOrgStore = create<OrgStoreState>()(
   immer((set, get) => ({
     viewMode: 'CURRENT_OFFICIAL',
+    canvasDisplayMode: 'ORGANIZATION',
     draftName: 'FY2027 Organization Plan',
     planName: 'Official Corporate Hierarchy (TTMET)',
     currentVersionName: 'Official Kintone Live',
@@ -201,6 +207,12 @@ export const useOrgStore = create<OrgStoreState>()(
           );
         });
       }
+    },
+
+    setCanvasDisplayMode: (mode: CanvasDisplayMode) => {
+      set(state => {
+        state.canvasDisplayMode = mode;
+      });
     },
 
     createDraft: (customName?: string) => {
@@ -315,14 +327,66 @@ export const useOrgStore = create<OrgStoreState>()(
       const subtreePositions = positions.filter(p => childCodes.has(p.orgUnitCode) && p.lifecycle !== 'CLOSED');
       const posIds = new Set(subtreePositions.map(p => p.id));
       const activeAssignments = assignments.filter(a => posIds.has(a.positionId));
+      const vacantPositions = subtreePositions.filter(p => p.lifecycle === 'VACANT' || !assignments.some(a => a.positionId === p.id));
 
       return {
         totalHeadcount: activeAssignments.length,
         totalPositions: subtreePositions.length,
-        childUnitCount: childCodes.size - 1
+        childUnitCount: childCodes.size - 1,
+        vacantCount: vacantPositions.length
       };
     },
 
+    getOrgLeader: (orgCode: string) => {
+      const { positions, assignments, employees } = get();
+      const unitPositions = positions.filter(p => p.orgUnitCode === orgCode && p.lifecycle !== 'CLOSED');
+      if (unitPositions.length === 0) {
+        return { position: null, employee: null, isVacant: false };
+      }
+
+      const rankPriority: Record<string, number> = {
+        'PRESIDENT': 100,
+        'MANAGING DIRECTOR': 95,
+        'EXECUTIVE VICE PRESIDENT': 90,
+        'VICE PRESIDENT': 85,
+        'DIVISION MANAGER': 80,
+        'DEPARTMENT MANAGER': 75,
+        'GENERAL MANAGER': 70,
+        'ASSISTANT GENERAL MANAGER': 65,
+        'SECTION MANAGER': 60,
+        'ASSISTANT SECTION MANAGER': 55,
+        'MANAGER': 50,
+        'TEAM LEADER': 45,
+        'LEADER': 40,
+        'CHIEF': 35,
+        'SUPERVISOR': 30
+      };
+
+      const getRank = (title: string): number => {
+        const upper = title.toUpperCase();
+        for (const [key, score] of Object.entries(rankPriority)) {
+          if (upper.includes(key)) return score;
+        }
+        return 0;
+      };
+
+      const sorted = [...unitPositions].sort((a, b) => getRank(b.title) - getRank(a.title));
+      const leaderPos = sorted[0];
+
+      const asg = assignments.find(a => a.positionId === leaderPos.id);
+      const emp = asg ? employees.find(e => e.id === asg.employeeId) || null : null;
+      const isVacant = leaderPos.lifecycle === 'VACANT' || !emp;
+
+      return {
+        position: leaderPos,
+        employee: emp,
+        isVacant
+      };
+    },
+
+    // -------------------------------------------------------------------------
+    // Domain Command: Move Organization Unit
+    // -------------------------------------------------------------------------
     moveOrgUnit: (unitCode: string, newParentCode: string) => {
       const { orgUnits, positions, assignments, changeOperations } = get();
 
@@ -374,6 +438,9 @@ export const useOrgStore = create<OrgStoreState>()(
       return { success: true };
     },
 
+    // -------------------------------------------------------------------------
+    // Domain Command: Add Organization Unit
+    // -------------------------------------------------------------------------
     addOrgUnit: (data: { name: string; code: string; type: string; parentCode: string }) => {
       const { orgUnits, positions, assignments, changeOperations } = get();
 
@@ -429,6 +496,9 @@ export const useOrgStore = create<OrgStoreState>()(
       return { success: true };
     },
 
+    // -------------------------------------------------------------------------
+    // Domain Command: Close Organization Unit (Official Node)
+    // -------------------------------------------------------------------------
     closeOrgUnit: (unitCode: string, effectiveDate: string, reason?: string) => {
       const { orgUnits, positions, assignments, changeOperations } = get();
 
@@ -470,6 +540,9 @@ export const useOrgStore = create<OrgStoreState>()(
       return { success: true };
     },
 
+    // -------------------------------------------------------------------------
+    // Domain Command: Remove Draft-Only Unit
+    // -------------------------------------------------------------------------
     removeDraftUnit: (unitCode: string) => {
       const { orgUnits, positions, assignments, changeOperations } = get();
       const unit = orgUnits.find(o => o.code === unitCode);
@@ -513,6 +586,9 @@ export const useOrgStore = create<OrgStoreState>()(
       return { success: true };
     },
 
+    // -------------------------------------------------------------------------
+    // Domain Command: Move Position
+    // -------------------------------------------------------------------------
     movePosition: (positionId: string, targetOrgUnitCode: string, newReportsToId: string | null = null) => {
       const { orgUnits, positions, assignments, changeOperations } = get();
 
@@ -562,6 +638,9 @@ export const useOrgStore = create<OrgStoreState>()(
       return true;
     },
 
+    // -------------------------------------------------------------------------
+    // Domain Command: Add Position
+    // -------------------------------------------------------------------------
     addPosition: (data: { orgUnitCode: string; title: string; code?: string }) => {
       const { orgUnits, positions, assignments, changeOperations } = get();
 
@@ -608,6 +687,9 @@ export const useOrgStore = create<OrgStoreState>()(
       return newPos;
     },
 
+    // -------------------------------------------------------------------------
+    // Domain Command: Close Position
+    // -------------------------------------------------------------------------
     closePosition: (positionId: string) => {
       const { orgUnits, positions, assignments, changeOperations } = get();
 
@@ -644,6 +726,9 @@ export const useOrgStore = create<OrgStoreState>()(
       get().persistDraftToLocalStorage();
     },
 
+    // -------------------------------------------------------------------------
+    // Domain Command: Move Employee (Vacancy Rule Enforced)
+    // -------------------------------------------------------------------------
     moveEmployee: (employeeId: string, targetPositionId: string) => {
       const { orgUnits, positions, assignments, employees, changeOperations } = get();
 
@@ -711,6 +796,9 @@ export const useOrgStore = create<OrgStoreState>()(
       return true;
     },
 
+    // -------------------------------------------------------------------------
+    // Domain Command: Vacate Position
+    // -------------------------------------------------------------------------
     vacatePosition: (positionId: string) => {
       const { orgUnits, positions, assignments, changeOperations } = get();
 

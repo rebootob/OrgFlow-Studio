@@ -34,6 +34,7 @@ function OrgFlowCanvas() {
     positions,
     assignments,
     employees,
+    canvasDisplayMode,
     initializeCurrentOrganization,
     undo,
     redo,
@@ -60,26 +61,27 @@ function OrgFlowCanvas() {
     initializeCurrentOrganization();
   }, [initializeCurrentOrganization]);
 
-  // 2. Compute ELK Layout whenever data or currentRootOrgCode changes
+  // 2. Compute ELK Layout whenever data, currentRootOrgCode or canvasDisplayMode changes
   const applyLayout = useCallback(async () => {
     if (orgUnits.length === 0) return;
     setIsLayouting(true);
     try {
       const layouted = await layoutOrgChart(orgUnits, positions, assignments, employees, {
-        rootOrgCode: currentRootOrgCode
+        rootOrgCode: currentRootOrgCode,
+        canvasDisplayMode
       });
       setNodes(layouted.nodes);
       setEdges(layouted.edges);
-      // Auto fit view when drilling down
+      // Auto fit view when drilling down or mode switching
       setTimeout(() => {
-        fitView({ padding: 0.2, duration: 400 });
+        fitView({ padding: 0.18, duration: 350 });
       }, 50);
     } catch (err) {
       console.error('[App] ELK Layout failed', err);
     } finally {
       setIsLayouting(false);
     }
-  }, [orgUnits, positions, assignments, employees, currentRootOrgCode, setNodes, setEdges, fitView]);
+  }, [orgUnits, positions, assignments, employees, currentRootOrgCode, canvasDisplayMode, setNodes, setEdges, fitView]);
 
   useEffect(() => {
     applyLayout();
@@ -94,9 +96,9 @@ function OrgFlowCanvas() {
       const currentNodes = getNodes();
       const targetNode = currentNodes.find(n => n.id === orgCode);
       if (targetNode) {
-        const x = targetNode.position.x + (targetNode.style?.width ? Number(targetNode.style.width) / 2 : 180);
-        const y = targetNode.position.y + 100;
-        setCenter(x, y, { zoom: 1.0, duration: 600 });
+        const x = targetNode.position.x + (targetNode.style?.width ? Number(targetNode.style.width) / 2 : 140);
+        const y = targetNode.position.y + 75;
+        setCenter(x, y, { zoom: 1.1, duration: 600 });
       }
     }, 100);
   }, [currentRootOrgCode, resetDrillDownToRoot, getNodes, setCenter]);
@@ -213,8 +215,8 @@ function OrgFlowCanvas() {
               nodeTypes={nodeTypes}
               minZoom={0.15}
               maxZoom={2.0}
-              defaultViewport={{ x: 100, y: 40, zoom: 0.75 }}
-              fitViewOptions={{ padding: 0.2 }}
+              defaultViewport={{ x: 100, y: 40, zoom: 0.8 }}
+              fitViewOptions={{ padding: 0.18 }}
             >
               <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="#cbd5e1" />
               <Controls className="!bg-white !border-slate-200 !text-slate-700 !shadow-sm [&>button]:!border-slate-100 [&>button]:!bg-white [&>button:hover]:!bg-slate-50" />
