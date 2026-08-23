@@ -1,7 +1,7 @@
-﻿import { memo } from 'react';
+import { memo } from 'react';
 import { Handle, Position as FlowPosition } from '@xyflow/react';
 import { OrgUnit, Position, Assignment, Employee } from '@orgflow/domain';
-import { Users, User, AlertCircle, Building2 } from 'lucide-react';
+import { AlertCircle, Users } from 'lucide-react';
 import { useOrgStore } from '../store/orgStore.js';
 
 interface PositionDetail {
@@ -17,98 +17,126 @@ interface OrgUnitNodeData {
 
 export const OrgUnitNode = memo(({ data }: { data: OrgUnitNodeData }) => {
   const { orgUnit, positions } = data;
-  const { selectedOrgCode, setSelectedOrgCode, setSelectedPositionId } = useOrgStore();
+  const { selectedOrgCode, selectedPositionId, setSelectedOrgCode, setSelectedPositionId } = useOrgStore();
 
   const isSelected = selectedOrgCode === orgUnit.code;
 
-  const levelColorMap: Record<number, { border: string; bg: string; badge: string }> = {
-    1: { border: 'border-emerald-500', bg: 'bg-emerald-950/40', badge: 'bg-emerald-600 text-white' },
-    2: { border: 'border-teal-500', bg: 'bg-teal-950/40', badge: 'bg-teal-600 text-white' },
-    3: { border: 'border-blue-500', bg: 'bg-blue-950/40', badge: 'bg-blue-600 text-white' },
-    4: { border: 'border-indigo-500', bg: 'bg-indigo-950/40', badge: 'bg-indigo-600 text-white' },
-    5: { border: 'border-purple-500', bg: 'bg-purple-950/40', badge: 'bg-purple-600 text-white' },
-    6: { border: 'border-slate-500', bg: 'bg-slate-900/60', badge: 'bg-slate-700 text-slate-200' },
-    7: { border: 'border-slate-600', bg: 'bg-slate-900/60', badge: 'bg-slate-800 text-slate-300' }
+  // Level badge colors (subtle and friendly)
+  const levelBadgeMap: Record<number, { bg: string; text: string; border: string }> = {
+    1: { bg: 'bg-emerald-50', text: 'text-emerald-800', border: 'border-emerald-200' },
+    2: { bg: 'bg-teal-50', text: 'text-teal-800', border: 'border-teal-200' },
+    3: { bg: 'bg-blue-50', text: 'text-blue-800', border: 'border-blue-200' },
+    4: { bg: 'bg-indigo-50', text: 'text-indigo-800', border: 'border-indigo-200' },
+    5: { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-200' },
+    6: { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-200' },
+    7: { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-200' }
   };
 
-  const colors = levelColorMap[orgUnit.level] || levelColorMap[5];
+  const badgeStyle = levelBadgeMap[orgUnit.level] || levelBadgeMap[5];
   const activeCount = positions.filter(p => p.position.lifecycle === 'ACTIVE').length;
   const vacantCount = positions.filter(p => p.position.lifecycle === 'VACANT').length;
 
   return (
     <div
-      onClick={() => setSelectedOrgCode(orgUnit.code)}
-      className={`w-[340px] rounded-xl border-2 shadow-2xl backdrop-blur-md transition-all duration-150 ${
-        colors.border
-      } ${colors.bg} ${isSelected ? 'ring-4 ring-emerald-400/80 shadow-emerald-900/50' : 'hover:border-slate-300'}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        setSelectedOrgCode(orgUnit.code);
+        setSelectedPositionId(null);
+      }}
+      className={`w-[360px] bg-white rounded-2xl border transition-all duration-150 shadow-xs select-none ${
+        isSelected
+          ? 'border-emerald-500 ring-4 ring-emerald-100 shadow-md'
+          : 'border-slate-200 hover:border-slate-300 hover:shadow-sm'
+      }`}
     >
+      {/* Top Handle for Parent Connection */}
       <Handle
         type="target"
         position={FlowPosition.Top}
-        className="!w-3 !h-3 !bg-slate-400 !border-2 !border-slate-900"
+        className="!w-2.5 !h-2.5 !bg-slate-400 !border-2 !border-white"
       />
 
-      <div className="p-3.5 border-b border-slate-700/60 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Building2 className="w-4 h-4 text-slate-400" />
-          <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-200 border border-slate-700">
-            {orgUnit.code}
-          </span>
-          <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${colors.badge}`}>
+      {/* Node Header */}
+      <div className="p-3.5 border-b border-slate-100 flex items-center justify-between">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className={`text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full border ${badgeStyle.bg} ${badgeStyle.text} ${badgeStyle.border}`}>
             {orgUnit.type}
           </span>
+          <span className="font-mono text-xs font-bold text-slate-900 truncate">
+            {orgUnit.code}
+          </span>
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-slate-400">
-          <Users className="w-3.5 h-3.5" />
-          <span className="font-semibold">{activeCount}</span>
+        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          <Users className="w-3.5 h-3.5 text-slate-400" />
+          <span className="font-semibold text-slate-700">{activeCount}</span>
           {vacantCount > 0 && (
-            <span className="px-1.5 py-0.2 text-[10px] bg-amber-950/80 text-amber-300 border border-amber-800/80 rounded">
-              {vacantCount} Vacant
+            <span className="px-1.5 py-0.2 text-[10px] bg-amber-50 text-amber-800 border border-amber-200 rounded-full font-medium">
+              {vacantCount} vacant
             </span>
           )}
         </div>
       </div>
 
-      <div className="px-3.5 py-2 font-semibold text-sm text-slate-100 truncate" title={orgUnit.name}>
+      {/* Org Name */}
+      <div className="px-4 py-2 text-xs font-semibold text-slate-800 truncate" title={orgUnit.name}>
         {orgUnit.name}
       </div>
 
-      <div className="p-2 space-y-1.5 max-h-[300px] overflow-y-auto">
+      {/* Position Cards Container */}
+      <div className="p-2 space-y-1.5 max-h-[320px] overflow-y-auto">
         {positions.length === 0 ? (
-          <div className="text-center py-2 text-xs text-slate-500 italic">No assigned positions</div>
+          <div className="text-center py-3 text-xs text-slate-400 italic">No assigned positions</div>
         ) : (
           positions.map(({ position, employee }) => {
             const isVacant = position.lifecycle === 'VACANT' || !employee;
+            const isPosSelected = selectedPositionId === position.id;
+
             return (
               <div
                 key={position.id}
                 onClick={(e) => {
                   e.stopPropagation();
+                  setSelectedOrgCode(orgUnit.code);
                   setSelectedPositionId(position.id);
                 }}
-                className={`p-2.5 rounded-lg border text-xs transition-colors flex items-center justify-between ${
-                  isVacant
-                    ? 'bg-amber-950/30 border-amber-800/60 hover:bg-amber-900/40 text-amber-200'
-                    : 'bg-slate-900/90 border-slate-700/80 hover:bg-slate-800/90 text-slate-200'
+                className={`p-3 rounded-xl border text-xs transition-all cursor-pointer ${
+                  isPosSelected
+                    ? 'border-emerald-500 bg-emerald-50/50 ring-2 ring-emerald-200'
+                    : isVacant
+                    ? 'bg-amber-50/60 border-amber-200/80 hover:bg-amber-50 text-amber-900'
+                    : 'bg-slate-50/70 border-slate-200/80 hover:bg-slate-100/70 text-slate-800'
                 }`}
               >
-                <div className="space-y-0.5 flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-semibold text-slate-100 truncate">{position.title}</span>
-                    <span className="font-mono text-[10px] text-slate-400">({position.code})</span>
-                  </div>
-                  <div className="flex items-center gap-1 text-[11px] text-slate-400">
-                    {isVacant ? (
-                      <span className="inline-flex items-center gap-1 text-amber-400 font-medium">
-                        <AlertCircle className="w-3 h-3" /> VACANT POSITION
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-semibold text-slate-900 truncate text-[13px]">
+                    {position.title}
+                  </span>
+                  <span className="font-mono text-[10px] text-slate-400 ml-1">
+                    {position.code}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-0.5">
+                  {isVacant ? (
+                    <span className="inline-flex items-center gap-1 text-amber-700 font-medium text-[11px]">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-500" /> VACANT POSITION
+                    </span>
+                  ) : (
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-[10px] font-bold">
+                        {employee.nameEN.charAt(0)}
+                      </div>
+                      <span className="font-medium text-slate-700 truncate text-xs">
+                        {employee.nameEN}
                       </span>
-                    ) : (
-                      <span className="truncate flex items-center gap-1 text-slate-300">
-                        <User className="w-3 h-3 text-emerald-400" />
-                        {employee.nameEN} ({employee.nickname || employee.employeeCode})
-                      </span>
-                    )}
-                  </div>
+                    </div>
+                  )}
+
+                  {employee && (
+                    <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-500">
+                      {employee.employeeCode}
+                    </span>
+                  )}
                 </div>
               </div>
             );
@@ -116,10 +144,11 @@ export const OrgUnitNode = memo(({ data }: { data: OrgUnitNodeData }) => {
         )}
       </div>
 
+      {/* Bottom Handle for Child Units */}
       <Handle
         type="source"
         position={FlowPosition.Bottom}
-        className="!w-3 !h-3 !bg-emerald-500 !border-2 !border-slate-900"
+        className="!w-2.5 !h-2.5 !bg-emerald-500 !border-2 !border-white"
       />
     </div>
   );

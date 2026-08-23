@@ -18,9 +18,9 @@ export async function createServer() {
     contentSecurityPolicy: false
   });
 
-  // 2. CORS Restriction (Frontend only)
+  // 2. CORS Restriction (Frontend port 3010 and localhost)
   await fastify.register(cors, {
-    origin: [env.CORS_ORIGIN, 'http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: [env.CORS_ORIGIN, 'http://localhost:3010', 'http://127.0.0.1:3010', 'http://localhost:3000', 'http://127.0.0.1:3000'],
     credentials: true
   });
 

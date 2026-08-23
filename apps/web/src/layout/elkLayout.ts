@@ -1,4 +1,4 @@
-﻿import ELK, { ElkNode } from 'elkjs/lib/elk.bundled.js';
+import ELK, { ElkNode } from 'elkjs/lib/elk.bundled.js';
 import { Node, Edge } from '@xyflow/react';
 import { OrgUnit, Position, Assignment, Employee } from '@orgflow/domain';
 
@@ -34,9 +34,8 @@ export async function layoutOrgChart(
   // 1. Build ELK graph for Org Units
   const elkChildren: ElkNode[] = orgUnits.map(org => {
     const orgPosList = orgPositionsMap.get(org.code) || [];
-    // Estimate height based on positions inside
-    const width = 340;
-    const height = Math.max(120, 70 + orgPosList.length * 75);
+    const width = 360;
+    const height = Math.max(130, 80 + orgPosList.length * 85);
     return {
       id: org.code,
       width,
@@ -57,8 +56,8 @@ export async function layoutOrgChart(
     layoutOptions: {
       'elk.algorithm': 'layered',
       'elk.direction': options.direction || 'DOWN',
-      'elk.spacing.nodeNode': String(options.nodeSpacing || 60),
-      'elk.layered.spacing.nodeNodeBetweenLayers': String(options.levelSpacing || 100),
+      'elk.spacing.nodeNode': String(options.nodeSpacing || 70),
+      'elk.layered.spacing.nodeNodeBetweenLayers': String(options.levelSpacing || 110),
       'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
       'elk.alignment': 'CENTER'
     },
@@ -94,13 +93,13 @@ export async function layoutOrgChart(
           positions: orgPositionsWithDetails
         },
         style: {
-          width: elkChild.width || 340
+          width: elkChild.width || 360
         }
       });
     }
   }
 
-  // 3. React Flow Edges
+  // 3. React Flow Edges (Clean, subtle, high contrast for light theme)
   for (const org of orgUnits) {
     if (org.parentCode) {
       edges.push({
@@ -109,7 +108,7 @@ export async function layoutOrgChart(
         target: org.code,
         type: 'smoothstep',
         animated: false,
-        style: { stroke: '#475569', strokeWidth: 2 }
+        style: { stroke: '#94a3b8', strokeWidth: 2 }
       });
     }
   }

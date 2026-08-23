@@ -1,20 +1,31 @@
-﻿@tailwind base;
+@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   body {
-    @apply bg-slate-950 text-slate-100;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    @apply bg-slate-50 text-slate-800;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
 }
 
-/* React Flow Canvas Customizations */
+/* React Flow Canvas Customizations for Light Theme */
 .react-flow__pane {
   cursor: grab;
 }
 .react-flow__pane:active {
   cursor: grabbing;
+}
+
+.react-flow__handle {
+  width: 10px !important;
+  height: 10px !important;
+  background-color: #94a3b8 !important;
+  border: 2px solid #ffffff !important;
+  border-radius: 50% !important;
+}
+.react-flow__handle:hover {
+  background-color: #10b981 !important;
 }
 
 @media print {
