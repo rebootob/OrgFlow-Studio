@@ -26,6 +26,8 @@ export interface OrgStoreState {
     treeHash: string;
   } | null;
 
+  currentRootOrgCode: string | null; // null = entire company
+
   orgUnits: OrgUnit[];
   positions: Position[];
   assignments: Assignment[];
@@ -52,6 +54,12 @@ export interface OrgStoreState {
   validationResult: { valid: boolean; errors: string[]; warnings: string[] };
 
   initializeCurrentOrganization: () => Promise<void>;
+  drillDownToOrg: (orgCode: string) => void;
+  drillUpToParent: () => void;
+  resetDrillDownToRoot: () => void;
+  getBreadcrumbTrail: () => Array<{ code: string; name: string }>;
+  getRollupStats: (orgCode: string) => { totalHeadcount: number; totalPositions: number; childUnitCount: number };
+
   moveEmployee: (employeeId: string, targetPositionId: string) => boolean;
   movePosition: (positionId: string, targetOrgUnitCode: string, newReportsToId?: string | null) => boolean;
   createPosition: (orgUnitCode: string, title: string) => Position;
@@ -78,6 +86,7 @@ export const useOrgStore = create<OrgStoreState>()(
     currentVersionName: 'CURRENT (Official Kintone)',
     effectiveDate: '2026-08-23',
     sourceSnapshotMeta: null,
+    currentRootOrgCode: null,
     orgUnits: [],
     positions: [],
     assignments: [],
@@ -109,6 +118,7 @@ export const useOrgStore = create<OrgStoreState>()(
               state.assignments = json.data.assignments;
               state.employees = json.data.employees;
               state.validationResult = json.validation;
+              state.currentRootOrgCode = null;
             });
             return;
           }
@@ -134,12 +144,91 @@ export const useOrgStore = create<OrgStoreState>()(
         state.employees = dataset.employees;
         state.undoStack = [];
         state.redoStack = [];
+        state.currentRootOrgCode = null;
         state.validationResult = validateOrganizationIntegrity(
           dataset.orgUnits,
           dataset.positions,
           dataset.assignments
         );
       });
+    },
+
+    drillDownToOrg: (orgCode: string) => {
+      set(state => {
+        state.currentRootOrgCode = orgCode;
+        state.selectedOrgCode = orgCode;
+        state.selectedPositionId = null;
+      });
+    },
+
+    drillUpToParent: () => {
+      const { currentRootOrgCode, orgUnits } = get();
+      if (!currentRootOrgCode) return;
+
+      const current = orgUnits.find(o => o.code === currentRootOrgCode);
+      set(state => {
+        state.currentRootOrgCode = current?.parentCode || null;
+        state.selectedOrgCode = current?.parentCode || null;
+        state.selectedPositionId = null;
+      });
+    },
+
+    resetDrillDownToRoot: () => {
+      set(state => {
+        state.currentRootOrgCode = null;
+        state.selectedOrgCode = null;
+        state.selectedPositionId = null;
+      });
+    },
+
+    getBreadcrumbTrail: () => {
+      const { currentRootOrgCode, orgUnits } = get();
+      if (!currentRootOrgCode) {
+        return [{ code: 'ALL', name: 'All Company Overview' }];
+      }
+
+      const trail: Array<{ code: string; name: string }> = [];
+      let curr: string | null = currentRootOrgCode;
+
+      while (curr) {
+        const found = orgUnits.find(o => o.code === curr);
+        if (found) {
+          trail.unshift({ code: found.code, name: found.name });
+          curr = found.parentCode;
+        } else {
+          break;
+        }
+      }
+
+      trail.unshift({ code: 'ALL', name: 'All Company Overview' });
+      return trail;
+    },
+
+    getRollupStats: (orgCode: string) => {
+      const { orgUnits, positions, assignments } = get();
+
+      // Find all descendants recursively
+      const childCodes = new Set<string>([orgCode]);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const org of orgUnits) {
+          if (org.parentCode && childCodes.has(org.parentCode) && !childCodes.has(org.code)) {
+            childCodes.add(org.code);
+            changed = true;
+          }
+        }
+      }
+
+      const subtreePositions = positions.filter(p => childCodes.has(p.orgUnitCode));
+      const posIds = new Set(subtreePositions.map(p => p.id));
+      const activeAssignments = assignments.filter(a => posIds.has(a.positionId));
+
+      return {
+        totalHeadcount: activeAssignments.length,
+        totalPositions: subtreePositions.length,
+        childUnitCount: childCodes.size - 1
+      };
     },
 
     moveEmployee: (employeeId: string, targetPositionId: string) => {

@@ -22,7 +22,7 @@ import { Sidebar } from './components/Sidebar.js';
 import { DetailPanel } from './components/DetailPanel.js';
 import { CompareModal } from './components/CompareModal.js';
 import { PrintModal } from './components/PrintModal.js';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, ChevronRight, Home, ArrowLeft } from 'lucide-react';
 
 const nodeTypes = {
   orgUnitNode: OrgUnitNode
@@ -38,6 +38,10 @@ function OrgFlowCanvas() {
     undo,
     redo,
     selectedOrgCode,
+    currentRootOrgCode,
+    drillUpToParent,
+    resetDrillDownToRoot,
+    getBreadcrumbTrail,
     activeCompareVersion,
     compareReport
   } = useOrgStore();
@@ -56,20 +60,26 @@ function OrgFlowCanvas() {
     initializeCurrentOrganization();
   }, [initializeCurrentOrganization]);
 
-  // 2. Compute ELK Layout whenever data changes
+  // 2. Compute ELK Layout whenever data or currentRootOrgCode changes
   const applyLayout = useCallback(async () => {
     if (orgUnits.length === 0) return;
     setIsLayouting(true);
     try {
-      const layouted = await layoutOrgChart(orgUnits, positions, assignments, employees);
+      const layouted = await layoutOrgChart(orgUnits, positions, assignments, employees, {
+        rootOrgCode: currentRootOrgCode
+      });
       setNodes(layouted.nodes);
       setEdges(layouted.edges);
+      // Auto fit view when drilling down
+      setTimeout(() => {
+        fitView({ padding: 0.2, duration: 400 });
+      }, 50);
     } catch (err) {
       console.error('[App] ELK Layout failed', err);
     } finally {
       setIsLayouting(false);
     }
-  }, [orgUnits, positions, assignments, employees, setNodes, setEdges]);
+  }, [orgUnits, positions, assignments, employees, currentRootOrgCode, setNodes, setEdges, fitView]);
 
   useEffect(() => {
     applyLayout();
@@ -77,18 +87,26 @@ function OrgFlowCanvas() {
 
   // 3. Search -> Focus Canvas Animation Handler
   const handleFocusNode = useCallback((orgCode: string) => {
-    const currentNodes = getNodes();
-    const targetNode = currentNodes.find(n => n.id === orgCode);
-    if (targetNode) {
-      const x = targetNode.position.x + (targetNode.style?.width ? Number(targetNode.style.width) / 2 : 180);
-      const y = targetNode.position.y + 100;
-      setCenter(x, y, { zoom: 1.0, duration: 600 });
+    if (currentRootOrgCode) {
+      resetDrillDownToRoot();
     }
-  }, [getNodes, setCenter]);
+    setTimeout(() => {
+      const currentNodes = getNodes();
+      const targetNode = currentNodes.find(n => n.id === orgCode);
+      if (targetNode) {
+        const x = targetNode.position.x + (targetNode.style?.width ? Number(targetNode.style.width) / 2 : 180);
+        const y = targetNode.position.y + 100;
+        setCenter(x, y, { zoom: 1.0, duration: 600 });
+      }
+    }, 100);
+  }, [currentRootOrgCode, resetDrillDownToRoot, getNodes, setCenter]);
 
   const handleFitOverview = useCallback(() => {
-    fitView({ padding: 0.15, duration: 500 });
-  }, [fitView]);
+    resetDrillDownToRoot();
+    setTimeout(() => {
+      fitView({ padding: 0.15, duration: 500 });
+    }, 100);
+  }, [resetDrillDownToRoot, fitView]);
 
   const handleFocusSelected = useCallback(() => {
     if (selectedOrgCode) {
@@ -115,6 +133,8 @@ function OrgFlowCanvas() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undo, redo]);
 
+  const breadcrumbs = getBreadcrumbTrail();
+
   return (
     <div className="flex flex-col h-screen w-screen bg-slate-50 overflow-hidden text-slate-800">
       {/* Light Clean Header */}
@@ -134,34 +154,77 @@ function OrgFlowCanvas() {
           onFocusNode={handleFocusNode}
         />
 
-        {/* Center Canvas */}
-        <main className="flex-1 relative bg-slate-50/80">
-          {isLayouting && (
-            <div className="absolute top-4 left-4 z-20 px-3.5 py-2 bg-white/95 border border-slate-200 text-xs font-semibold text-slate-700 rounded-xl flex items-center gap-2 shadow-md backdrop-blur-xs">
-              <RefreshCw className="w-4 h-4 text-emerald-600 animate-spin" />
-              <span>Organizing Hierarchy Layout...</span>
-            </div>
-          )}
+        {/* Center Canvas with Breadcrumb Header */}
+        <main className="flex-1 relative bg-slate-50/80 flex flex-col">
+          {/* Breadcrumb Navigation Bar */}
+          <div className="h-10 bg-white/80 border-b border-slate-200 px-4 flex items-center justify-between backdrop-blur-xs z-10 select-none">
+            <div className="flex items-center gap-1.5 text-xs text-slate-600">
+              <button
+                onClick={resetDrillDownToRoot}
+                className="hover:text-emerald-700 font-semibold flex items-center gap-1 p-1 rounded hover:bg-slate-100 transition-colors"
+                title="Return to whole company view"
+              >
+                <Home className="w-3.5 h-3.5" />
+                <span>Company (TTMET)</span>
+              </button>
 
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            nodeTypes={nodeTypes}
-            minZoom={0.15}
-            maxZoom={2.0}
-            defaultViewport={{ x: 100, y: 40, zoom: 0.75 }}
-            fitViewOptions={{ padding: 0.2 }}
-          >
-            <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="#cbd5e1" />
-            <Controls className="!bg-white !border-slate-200 !text-slate-700 !shadow-sm [&>button]:!border-slate-100 [&>button]:!bg-white [&>button:hover]:!bg-slate-50" />
-            <MiniMap
-              className="!bg-white/95 !border !border-slate-200 !rounded-2xl !overflow-hidden shadow-md"
-              nodeColor={() => '#10b981'}
-              maskColor="rgba(241, 245, 249, 0.7)"
-            />
-          </ReactFlow>
+              {currentRootOrgCode && (
+                <>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="font-bold text-slate-900 px-1.5 py-0.5 bg-emerald-50 text-emerald-900 border border-emerald-200 rounded-md">
+                    {breadcrumbs[breadcrumbs.length - 1]?.name} ({currentRootOrgCode})
+                  </span>
+                </>
+              )}
+            </div>
+
+            {currentRootOrgCode && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={drillUpToParent}
+                  className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1 transition-colors"
+                >
+                  <ArrowLeft className="w-3 h-3" /> Up One Level
+                </button>
+                <button
+                  onClick={resetDrillDownToRoot}
+                  className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors"
+                >
+                  Reset to Overview
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Canvas Area */}
+          <div className="flex-1 relative">
+            {isLayouting && (
+              <div className="absolute top-4 left-4 z-20 px-3.5 py-2 bg-white/95 border border-slate-200 text-xs font-semibold text-slate-700 rounded-xl flex items-center gap-2 shadow-md backdrop-blur-xs">
+                <RefreshCw className="w-4 h-4 text-emerald-600 animate-spin" />
+                <span>Organizing Hierarchy Layout...</span>
+              </div>
+            )}
+
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              nodeTypes={nodeTypes}
+              minZoom={0.15}
+              maxZoom={2.0}
+              defaultViewport={{ x: 100, y: 40, zoom: 0.75 }}
+              fitViewOptions={{ padding: 0.2 }}
+            >
+              <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="#cbd5e1" />
+              <Controls className="!bg-white !border-slate-200 !text-slate-700 !shadow-sm [&>button]:!border-slate-100 [&>button]:!bg-white [&>button:hover]:!bg-slate-50" />
+              <MiniMap
+                className="!bg-white/95 !border !border-slate-200 !rounded-2xl !overflow-hidden shadow-md"
+                nodeColor={() => '#10b981'}
+                maskColor="rgba(241, 245, 249, 0.7)"
+              />
+            </ReactFlow>
+          </div>
         </main>
 
         {/* Right Detail Inspector Panel */}

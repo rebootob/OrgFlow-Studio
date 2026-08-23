@@ -8,6 +8,7 @@ export interface LayoutOptions {
   direction?: 'DOWN' | 'RIGHT';
   nodeSpacing?: number;
   levelSpacing?: number;
+  rootOrgCode?: string | null;
 }
 
 export async function layoutOrgChart(
@@ -23,6 +24,23 @@ export async function layoutOrgChart(
   const nodes: Node[] = [];
   const edges: Edge[] = [];
 
+  // Filter visible OrgUnits if rootOrgCode is set
+  let visibleOrgs = orgUnits;
+  if (options.rootOrgCode) {
+    const includedCodes = new Set<string>([options.rootOrgCode]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const org of orgUnits) {
+        if (org.parentCode && includedCodes.has(org.parentCode) && !includedCodes.has(org.code)) {
+          includedCodes.add(org.code);
+          changed = true;
+        }
+      }
+    }
+    visibleOrgs = orgUnits.filter(o => includedCodes.has(o.code));
+  }
+
   // Group positions by OrgUnit
   const orgPositionsMap = new Map<string, Position[]>();
   positions.forEach(p => {
@@ -32,10 +50,10 @@ export async function layoutOrgChart(
   });
 
   // 1. Build ELK graph for Org Units
-  const elkChildren: ElkNode[] = orgUnits.map(org => {
+  const elkChildren: ElkNode[] = visibleOrgs.map(org => {
     const orgPosList = orgPositionsMap.get(org.code) || [];
     const width = 360;
-    const height = Math.max(130, 80 + orgPosList.length * 85);
+    const height = Math.max(140, 85 + orgPosList.length * 85);
     return {
       id: org.code,
       width,
@@ -43,8 +61,9 @@ export async function layoutOrgChart(
     };
   });
 
-  const elkEdges = orgUnits
-    .filter(org => org.parentCode)
+  const visibleOrgCodes = new Set(visibleOrgs.map(o => o.code));
+  const elkEdges = visibleOrgs
+    .filter(org => org.parentCode && visibleOrgCodes.has(org.parentCode))
     .map(org => ({
       id: `edge-${org.parentCode}-${org.code}`,
       sources: [org.parentCode!],
@@ -70,7 +89,7 @@ export async function layoutOrgChart(
   // 2. Convert ELK layout to React Flow nodes and edges
   if (layoutedGraph.children) {
     for (const elkChild of layoutedGraph.children) {
-      const org = orgUnits.find(o => o.code === elkChild.id);
+      const org = visibleOrgs.find(o => o.code === elkChild.id);
       if (!org) continue;
 
       const orgPosList = orgPositionsMap.get(org.code) || [];
@@ -99,9 +118,9 @@ export async function layoutOrgChart(
     }
   }
 
-  // 3. React Flow Edges (Clean, subtle, high contrast for light theme)
-  for (const org of orgUnits) {
-    if (org.parentCode) {
+  // 3. React Flow Edges
+  for (const org of visibleOrgs) {
+    if (org.parentCode && visibleOrgCodes.has(org.parentCode)) {
       edges.push({
         id: `edge-${org.parentCode}-${org.code}`,
         source: org.parentCode,
