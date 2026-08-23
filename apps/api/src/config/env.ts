@@ -13,6 +13,10 @@ const EnvSchema = z.object({
   // Kintone Configuration (Read-Only)
   KINTONE_BASE_URL: z.string().default('https://ttmet.cybozu.com'),
   KINTONE_READ_API_TOKEN: z.string().optional().default(''),
+  KINTONE_USERNAME: z.string().optional().default(''),
+  KINTONE_PASSWORD: z.string().optional().default(''),
+  BASIC_AUTH_USER: z.string().optional().default(''),
+  BASIC_AUTH_PASS: z.string().optional().default(''),
   KINTONE_APP_EMPLOYEE: z.coerce.number().default(53),
   KINTONE_APP_ORGANIZATION: z.coerce.number().default(791),
   KINTONE_APP_ASSIGNMENTS: z.coerce.number().default(792),

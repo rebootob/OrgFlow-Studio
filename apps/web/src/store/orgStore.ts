@@ -13,12 +13,10 @@ import {
   canCloseOrgUnit,
   computeVersionDiff,
   detectCircularReporting,
-  buildNormalizedDataset,
   ChartVisibility,
   ReviewStatus,
   ReviewRecord
 } from '@orgflow/domain';
-import { CANONICAL_57_MASTER, generate275EmployeesFixture } from '../data/baseline.js';
 
 export type MainNavTab = 'ORGANIZATION' | 'DATA_REVIEW';
 export type CanvasDisplayMode = 'OVERVIEW' | 'ORGANIZATION' | 'PEOPLE';
@@ -185,15 +183,22 @@ export const useOrgStore = create<OrgStoreState>()(
 
     initializeCurrentOrganization: async () => {
       let fetchedData: any = null;
+      let fetchError: string | null = null;
       try {
         const resp = await fetch('http://127.0.0.1:4000/api/kintone/current-organization');
         if (resp.ok) {
           const json = await resp.json();
           if (json.success && json.data) {
             fetchedData = json;
+          } else {
+            fetchError = json.message || 'Failed to load official organization data from Kintone';
           }
+        } else {
+          fetchError = `Kintone API HTTP error: ${resp.status} ${resp.statusText}`;
         }
-      } catch {}
+      } catch (err: any) {
+        fetchError = err.message || 'Network error connecting to OrgFlow backend';
+      }
 
       if (fetchedData) {
         set(state => {
@@ -212,32 +217,22 @@ export const useOrgStore = create<OrgStoreState>()(
           state.currentRootOrgCode = null;
         });
       } else {
-        const rawEmployees = generate275EmployeesFixture();
-        const dataset = buildNormalizedDataset(CANONICAL_57_MASTER, rawEmployees, true);
-
+        // STRICT FAIL CLOSED: Do NOT load synthetic fixtures into official runtime
         set(state => {
-          state.sourceSnapshotMeta = {
-            snapshotId: `snap-local-${Date.now()}`,
-            loadedAt: new Date().toISOString(),
-            mappingVersion: '2.0.0-canonical-57',
-            treeHash: '741ec827543763109799440bc0c9fa80'
-          };
-          state.orgUnits = dataset.orgUnits;
-          state.positions = dataset.positions;
-          state.assignments = dataset.assignments;
-          state.employees = dataset.employees;
-          state.officialBaseline = {
-            orgUnits: JSON.parse(JSON.stringify(dataset.orgUnits)),
-            positions: JSON.parse(JSON.stringify(dataset.positions)),
-            assignments: JSON.parse(JSON.stringify(dataset.assignments)),
-            employees: JSON.parse(JSON.stringify(dataset.employees))
-          };
+          state.sourceSnapshotMeta = null;
+          state.orgUnits = [];
+          state.positions = [];
+          state.assignments = [];
+          state.employees = [];
+          state.officialBaseline = null;
           state.currentRootOrgCode = null;
-          state.validationResult = validateOrganizationIntegrity(
-            dataset.orgUnits,
-            dataset.positions,
-            dataset.assignments
-          );
+          state.validationResult = {
+            valid: false,
+            errors: [
+              `DATA SOURCE UNAVAILABLE: ${fetchError || 'Kintone Live Read API disconnected.'} Synthetic fallback is disabled.`
+            ],
+            warnings: []
+          };
         });
       }
     },
@@ -1087,6 +1082,16 @@ export const useOrgStore = create<OrgStoreState>()(
 
       try {
         const parsed = JSON.parse(dataStr);
+        // Safety Gate: Reject and clear legacy drafts with synthetic placeholder strings
+        const hasSynthetic = (parsed.employees || []).some(
+          (e: any) => e.nameEN?.includes('Staff Member') || (e.nameTH && e.nameTH.includes('พนักงานทดสอบ')) || e.nameEN?.includes('Employee Staff')
+        );
+        if (hasSynthetic) {
+          console.warn('[OrgStore] Obsolete synthetic draft detected in localStorage. Clearing draft cache.');
+          window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+          return false;
+        }
+
         set(state => {
           state.viewMode = 'DRAFT';
           state.draftName = parsed.draftName || 'FY2027 Organization Plan';

@@ -91,6 +91,12 @@ export const Header: React.FC<HeaderProps> = ({
             <Database className="w-3 h-3 text-slate-400" />
             <span className="font-semibold text-slate-700">Apps 53 / 791 / 792</span>
           </div>
+
+          {sourceSnapshotMeta?.loadedAt && (
+            <span className="hidden xl:inline-block text-[11px] text-slate-500 font-medium pl-1">
+              Loaded: <strong className="text-slate-700">{new Date(sourceSnapshotMeta.loadedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</strong>
+            </span>
+          )}
         </div>
       </div>
 

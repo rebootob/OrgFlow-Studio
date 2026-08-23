@@ -1,4 +1,4 @@
-﻿import { OrgUnit, Position, Assignment, Employee } from './types.js';
+import { OrgUnit, Position, Assignment, Employee } from './types.js';
 
 export interface RawLegacyOrgRecord {
   code: string;
@@ -11,9 +11,11 @@ export interface RawLegacyOrgRecord {
 
 export interface RawLegacyEmployeeRecord {
   emp_text?: { value: string };
+  Number?: { value: string };
   Text_0?: { value: string }; // Name TH
   Text?: { value: string };   // Name EN
   Text_1?: { value: string }; // Nickname
+  Drop_down?: { value: string }; // Direct Org Unit Code (e.g. TMG2, TMF1, TMH2)
   Drop_down_0?: { value: string }; // Dept
   Drop_down_1?: { value: string }; // Section
   Drop_down_2?: { value: string }; // Team
@@ -35,13 +37,15 @@ export const PRESENTATION_OVERLAY_NODES: OrgUnit[] = [
 
 export function normalizeRawEmployee(raw: RawLegacyEmployeeRecord): Employee {
   const id = raw.$id?.value || raw.emp_text?.value || '';
+  const empCode = (raw.emp_text?.value && raw.emp_text.value.trim()) || (raw.Number?.value ? `EMP-${raw.Number.value.padStart(3, '0')}` : `REC-${id}`);
+  const deptCode = raw.Drop_down?.value || raw.Drop_down_0?.value || '';
   return {
     id: String(id),
-    employeeCode: String(raw.emp_text?.value || id).trim(),
+    employeeCode: empCode,
     nameTH: raw.Text_0?.value || '',
     nameEN: raw.Text?.value || '',
     nickname: raw.Text_1?.value || '',
-    departmentId: raw.Drop_down_0?.value || '',
+    departmentId: deptCode,
     section: raw.Drop_down_1?.value || '',
     team: raw.Drop_down_2?.value || '',
     positionId: raw.Text_2?.value || '',

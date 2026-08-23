@@ -6,13 +6,30 @@ export class KintoneReadOnlyClient {
   private client: KintoneRestAPIClient | null = null;
 
   constructor() {
-    if (env.KINTONE_BASE_URL && env.KINTONE_READ_API_TOKEN) {
-      this.client = new KintoneRestAPIClient({
-        baseUrl: env.KINTONE_BASE_URL,
-        auth: {
-          apiToken: env.KINTONE_READ_API_TOKEN
+    if (env.KINTONE_BASE_URL) {
+      if (env.KINTONE_READ_API_TOKEN) {
+        this.client = new KintoneRestAPIClient({
+          baseUrl: env.KINTONE_BASE_URL,
+          auth: {
+            apiToken: env.KINTONE_READ_API_TOKEN
+          }
+        });
+      } else if (env.KINTONE_USERNAME && env.KINTONE_PASSWORD) {
+        const clientOptions: any = {
+          baseUrl: env.KINTONE_BASE_URL,
+          auth: {
+            username: env.KINTONE_USERNAME,
+            password: env.KINTONE_PASSWORD
+          }
+        };
+        if (env.BASIC_AUTH_USER && env.BASIC_AUTH_PASS) {
+          clientOptions.basicAuth = {
+            username: env.BASIC_AUTH_USER,
+            password: env.BASIC_AUTH_PASS
+          };
         }
-      });
+        this.client = new KintoneRestAPIClient(clientOptions);
+      }
     }
   }
 

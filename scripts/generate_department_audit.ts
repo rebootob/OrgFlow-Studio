@@ -45,8 +45,20 @@ export async function runDepartmentAudit() {
     fs.mkdirSync(deptCsvDir, { recursive: true });
   }
 
-  const rawEmployees = generate275EmployeesFixture();
-  const dataset = buildNormalizedDataset(CANONICAL_57_MASTER, rawEmployees, true);
+  let dataset: { orgUnits: OrgUnit[]; positions: Position[]; assignments: Assignment[]; employees: Employee[] };
+
+  try {
+    console.log('Fetching live organization data from OrgFlow API...');
+    const resp = await fetch('http://127.0.0.1:4000/api/kintone/current-organization');
+    const json = await resp.json();
+    if (!json.success || !json.data) {
+      throw new Error(json.message || 'API returned success=false');
+    }
+    dataset = json.data;
+    console.log(`Live Data Connected: ${dataset.employees.length} Employees, ${dataset.positions.length} Positions, ${dataset.orgUnits.length} Units`);
+  } catch (err: any) {
+    throw new Error(`FAIL CLOSED: Unable to fetch live Kintone data from API: ${err.message}. Synthetic fallback is disabled.`);
+  }
 
   const { orgUnits, positions, assignments, employees } = dataset;
   const issues: AuditIssue[] = [];
@@ -278,7 +290,7 @@ export async function runDepartmentAudit() {
       divisionCode: group.divisionCode,
       level: group.level,
       childUnits: group.childUnits.length,
-      dataSource: 'CANONICAL_AUTHENTIC_READONLY'
+      dataSource: 'KINTONE_LIVE_READ'
     });
   });
 
@@ -471,7 +483,7 @@ export async function runDepartmentAudit() {
         app53Id: emp ? emp.id : 'N/A',
         app791Id: org?.id || 'N/A',
         app792Id: asg ? asg.id : 'N/A',
-        dataSource: 'CANONICAL_AUTHENTIC_READONLY'
+        dataSource: 'KINTONE_LIVE_READ'
       };
 
       const addedRow = sheet.addRow(rowData);
