@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 # OrgFlow Studio — Security-First .gitignore Baseline
 # ==============================================================================
 
@@ -44,6 +44,8 @@ app792_records*
 app793_records*
 employee_master_export*
 kintone_snapshot*
+org data/
+"org data/"
 
 # Signed Approval Documents & Uploads
 uploads/
