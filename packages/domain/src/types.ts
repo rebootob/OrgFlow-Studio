@@ -173,3 +173,31 @@ export interface DiffReport {
     filled: Array<{ positionId: string; positionTitle: string; employeeId: string; employeeName: string }>;
   };
 }
+
+export type ReviewStatus =
+  | 'NOT_REVIEWED'
+  | 'CORRECT'
+  | 'WRONG_DEPARTMENT'
+  | 'WRONG_ORG_UNIT'
+  | 'WRONG_POSITION'
+  | 'MISSING_ASSIGNMENT'
+  | 'EXTRA_ASSIGNMENT'
+  | 'MISSING_EMPLOYEE'
+  | 'DUPLICATE'
+  | 'NEED_REVIEW';
+
+export interface ReviewRecord {
+  id: string; // target ID (e.g. employeeId or positionId)
+  targetType: 'EMPLOYEE' | 'POSITION' | 'ASSIGNMENT';
+  status: ReviewStatus;
+  expectedDeptCode?: string;
+  expectedDeptName?: string;
+  expectedOrgUnitCode?: string;
+  expectedOrgUnitName?: string;
+  expectedPositionCode?: string;
+  expectedPositionName?: string;
+  reviewNote?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+}
+

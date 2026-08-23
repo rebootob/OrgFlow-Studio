@@ -157,7 +157,6 @@ export async function runDepartmentAudit() {
   });
 
   // === RUN INTEGRITY AUDIT CHECKS ===
-  // 1. Employee checks
   employees.forEach(emp => {
     const asgs = asgByEmpId.get(emp.id) || [];
     if (asgs.length === 0) {
@@ -185,7 +184,6 @@ export async function runDepartmentAudit() {
     }
   });
 
-  // 2. Assignment checks
   assignments.forEach(asg => {
     const emp = empMap.get(asg.employeeId);
     const pos = posMap.get(asg.positionId);
@@ -211,7 +209,6 @@ export async function runDepartmentAudit() {
     }
   });
 
-  // 3. Position checks
   positions.forEach(pos => {
     const org = orgMap.get(pos.orgUnitCode);
     if (!org) {
@@ -239,19 +236,18 @@ export async function runDepartmentAudit() {
   summarySheet.columns = [
     { header: 'Department Code', key: 'deptCode', width: 18 },
     { header: 'Department Name', key: 'deptName', width: 38 },
+    { header: 'Employees', key: 'employees', width: 12 },
+    { header: 'Positions', key: 'positions', width: 12 },
+    { header: 'System Issues', key: 'sysIssues', width: 14 },
+    { header: 'HR Reviewed', key: 'hrReviewed', width: 14 },
+    { header: 'HR Correct', key: 'hrCorrect', width: 14 },
+    { header: 'HR Issues', key: 'hrIssues', width: 14 },
+    { header: 'Not Reviewed', key: 'notReviewed', width: 14 },
+    { header: 'Completion %', key: 'completion', width: 14 },
+    { header: 'Department Approval', key: 'approval', width: 22 },
     { header: 'Parent Division', key: 'divisionCode', width: 18 },
     { header: 'Level', key: 'level', width: 8 },
     { header: 'Child Units', key: 'childUnits', width: 12 },
-    { header: 'Total Positions', key: 'totalPositions', width: 15 },
-    { header: 'Filled Positions', key: 'filledPositions', width: 15 },
-    { header: 'Vacancies', key: 'vacancies', width: 12 },
-    { header: 'Active Employees', key: 'activeEmployees', width: 16 },
-    { header: 'Direct Employees', key: 'directEmployees', width: 16 },
-    { header: 'Child Unit Employees', key: 'childEmployees', width: 20 },
-    { header: 'Visible Positions', key: 'visiblePositions', width: 16 },
-    { header: 'Hidden Positions', key: 'hiddenPositions', width: 16 },
-    { header: 'Issues Count', key: 'issuesCount', width: 14 },
-    { header: 'Audit Status', key: 'auditStatus', width: 14 },
     { header: 'Data Source Mode', key: 'dataSource', width: 28 }
   ];
 
@@ -262,15 +258,6 @@ export async function runDepartmentAudit() {
   let grandTotalPositions = 0;
 
   Array.from(deptGroups.values()).sort((a, b) => a.level - b.level || a.deptCode.localeCompare(b.deptCode)).forEach(group => {
-    const directEmps = group.employees.filter(e => {
-      const asg = asgByEmpId.get(e.id)?.[0];
-      const pos = asg ? posMap.get(asg.positionId) : null;
-      return pos?.orgUnitCode === group.deptCode;
-    }).length;
-    const childEmps = group.employees.length - directEmps;
-    const visibleCount = group.positions.filter(p => resolveChartVisibility({ position: p, orgUnit: orgMap.get(p.orgUnitCode) }).visible).length;
-    const hiddenCount = group.positions.length - visibleCount;
-    const vacancies = group.positions.filter(p => p.lifecycle === 'VACANT' || !asgByPosId.has(p.id)).length;
     const deptIssues = issues.filter(i => i.orgUnitCode === group.deptCode || i.actualDept === group.deptCode);
 
     grandTotalEmployees += group.employees.length;
@@ -279,19 +266,18 @@ export async function runDepartmentAudit() {
     summarySheet.addRow({
       deptCode: group.deptCode,
       deptName: group.deptName,
+      employees: group.employees.length,
+      positions: group.positions.length,
+      sysIssues: deptIssues.length,
+      hrReviewed: 0,
+      hrCorrect: 0,
+      hrIssues: 0,
+      notReviewed: group.employees.length,
+      completion: '0%',
+      approval: 'PENDING',
       divisionCode: group.divisionCode,
       level: group.level,
       childUnits: group.childUnits.length,
-      totalPositions: group.positions.length,
-      filledPositions: group.employees.length,
-      vacancies,
-      activeEmployees: group.employees.length,
-      directEmployees: directEmps,
-      childEmployees: childEmps,
-      visiblePositions: visibleCount,
-      hiddenPositions: hiddenCount,
-      issuesCount: deptIssues.length,
-      auditStatus: deptIssues.length === 0 ? 'OK' : 'REVIEW',
       dataSource: 'CANONICAL_AUTHENTIC_READONLY'
     });
   });
@@ -299,83 +285,133 @@ export async function runDepartmentAudit() {
   // Summary total row
   const summaryTotalRow = summarySheet.addRow({
     deptCode: 'TOTAL RECONCILIATION',
-    deptName: 'ALL DEPARTMENTS COMBINED',
+    deptName: 'ALL SUBTREES COMBINED',
+    employees: grandTotalEmployees,
+    positions: grandTotalPositions,
+    sysIssues: issues.length,
+    hrReviewed: 0,
+    hrCorrect: 0,
+    hrIssues: 0,
+    notReviewed: grandTotalEmployees,
+    completion: '0%',
+    approval: 'PENDING',
     divisionCode: '-',
     level: '-',
     childUnits: orgUnits.length,
-    totalPositions: grandTotalPositions,
-    filledPositions: grandTotalEmployees,
-    vacancies: 0,
-    activeEmployees: grandTotalEmployees,
-    directEmployees: '-',
-    childEmployees: '-',
-    visiblePositions: 73,
-    hiddenPositions: 202,
-    issuesCount: issues.length,
-    auditStatus: issues.length === 0 ? 'OK' : 'REVIEW',
     dataSource: 'CANONICAL_AUTHENTIC_READONLY'
   });
   summaryTotalRow.font = { bold: true };
 
-  // 2. ISSUES SHEET
-  const issuesSheet = wb.addWorksheet('ISSUES', { views: [{ state: 'frozen', ySplit: 1 }] });
-  issuesSheet.columns = [
-    { header: 'Severity', key: 'severity', width: 14 },
-    { header: 'Issue Type', key: 'issueType', width: 24 },
-    { header: 'Employee Code', key: 'employeeCode', width: 16 },
-    { header: 'Employee Name', key: 'employeeName', width: 26 },
-    { header: 'Position Code', key: 'positionCode', width: 16 },
-    { header: 'Position Name', key: 'positionName', width: 24 },
-    { header: 'Org Unit Code', key: 'orgUnitCode', width: 16 },
-    { header: 'Org Unit Name', key: 'orgUnitName', width: 28 },
-    { header: 'Source App', key: 'sourceApp', width: 14 },
-    { header: 'Source Record ID', key: 'sourceRecordId', width: 20 },
-    { header: 'Description', key: 'description', width: 45 },
-    { header: 'Recommended Action', key: 'recommendedAction', width: 35 }
+  // 2. HR_REVIEW_ISSUES SHEET
+  const hrIssuesSheet = wb.addWorksheet('HR_REVIEW_ISSUES', { views: [{ state: 'frozen', ySplit: 1 }] });
+  hrIssuesSheet.columns = [
+    { header: 'Employee Code', key: 'empCode', width: 16 },
+    { header: 'Employee Name', key: 'empName', width: 26 },
+    { header: 'Current Department', key: 'currDept', width: 20 },
+    { header: 'Expected Department', key: 'expDept', width: 20 },
+    { header: 'Current Org Unit', key: 'currOrg', width: 20 },
+    { header: 'Expected Org Unit', key: 'expOrg', width: 20 },
+    { header: 'Current Position', key: 'currPos', width: 22 },
+    { header: 'Expected Position', key: 'expPos', width: 22 },
+    { header: 'Review Status', key: 'status', width: 20 },
+    { header: 'HR Review Note', key: 'note', width: 35 },
+    { header: 'Reviewed By', key: 'reviewedBy', width: 18 },
+    { header: 'Reviewed At', key: 'reviewedAt', width: 20 },
+    { header: 'App 53 ID', key: 'app53', width: 14 },
+    { header: 'App 791 ID', key: 'app791', width: 14 },
+    { header: 'App 792 ID', key: 'app792', width: 14 }
   ];
-  issuesSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  issuesSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF991B1B' } };
+  hrIssuesSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  hrIssuesSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFB91C1C' } };
+  hrIssuesSheet.addRow({
+    empCode: 'NONE',
+    empName: 'Zero HR Review Issues Logged Yet',
+    currDept: '-',
+    expDept: '-',
+    currOrg: '-',
+    expOrg: '-',
+    currPos: '-',
+    expPos: '-',
+    status: 'NOT_REVIEWED',
+    note: 'Mark records in individual Department sheets to populate this review register.',
+    reviewedBy: '-',
+    reviewedAt: '-',
+    app53: '-',
+    app791: '-',
+    app792: '-'
+  });
 
-  if (issues.length === 0) {
-    issuesSheet.addRow({
-      severity: 'INFO',
-      issueType: 'ZERO_ISSUES_DETECTED',
-      description: 'Zero hierarchy, assignment, or employee anomalies detected across 275 master records.',
-      recommendedAction: 'Proceed with Department verification.'
-    });
-  } else {
-    issues.forEach(iss => issuesSheet.addRow(iss));
-  }
-
-  // 3. ONE SHEET PER DEPARTMENT
+  // 3. ONE SHEET PER DEPARTMENT SUBTREE
   Array.from(deptGroups.values()).forEach(group => {
     const safeSheetName = `${group.deptCode}_${group.deptName.replace(/[^a-zA-Z0-9]/g, '')}`.slice(0, 31);
-    const sheet = wb.addWorksheet(safeSheetName, { views: [{ state: 'frozen', ySplit: 1 }] });
+    const sheet = wb.addWorksheet(safeSheetName, { views: [{ state: 'frozen', ySplit: 5 }] });
 
-    sheet.columns = [
-      { header: 'Dept Code', key: 'deptCode', width: 14 },
-      { header: 'Child Org Code', key: 'orgCode', width: 16 },
-      { header: 'Child Org Name', key: 'orgName', width: 28 },
-      { header: 'Org Type', key: 'orgType', width: 14 },
-      { header: 'Org Level', key: 'orgLevel', width: 10 },
-      { header: 'Employee Code', key: 'empCode', width: 16 },
-      { header: 'Employee Name (EN)', key: 'empNameEN', width: 26 },
-      { header: 'Employee Name (TH)', key: 'empNameTH', width: 26 },
-      { header: 'Status', key: 'empStatus', width: 12 },
-      { header: 'Position Code', key: 'posCode', width: 16 },
-      { header: 'Position Title', key: 'posTitle', width: 26 },
-      { header: 'Position Status', key: 'posStatus', width: 14 },
-      { header: 'Chart Visibility', key: 'visibility', width: 14 },
-      { header: 'Visibility Source', key: 'visSource', width: 22 },
-      { header: 'Visibility Reason', key: 'visReason', width: 45 },
-      { header: 'App 53 Record ID', key: 'app53Id', width: 16 },
-      { header: 'App 791 Org ID', key: 'app791Id', width: 16 },
-      { header: 'App 792 Asg ID', key: 'app792Id', width: 16 },
-      { header: 'Data Source Mode', key: 'dataSource', width: 28 }
+    // Header Summary Block
+    sheet.mergeCells('A1:U1');
+    const titleCell = sheet.getCell('A1');
+    titleCell.value = `DEPARTMENT AUDIT: ${group.deptName} (${group.deptCode}) | Level: ${group.level} | Division: ${group.divisionCode}`;
+    titleCell.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
+
+    sheet.mergeCells('A2:U2');
+    const statCell = sheet.getCell('A2');
+    statCell.value = `Subtree Metrics: Total Active Staff: ${group.employees.length} | Total Positions: ${group.positions.length} | Vacancies: 0 | Child Organization Units: ${group.childUnits.length}`;
+    statCell.font = { bold: true, size: 10, color: { argb: 'FF334155' } };
+    statCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+
+    sheet.mergeCells('A3:U3');
+    const progressCell = sheet.getCell('A3');
+    progressCell.value = `HR Manual Validation -> Reviewed: 0 | Correct: 0 | Issues: 0 | Not Reviewed: ${group.employees.length} | Department Approval Status: PENDING`;
+    progressCell.font = { italic: true, size: 10, color: { argb: 'FF475569' } };
+    progressCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+
+    // Empty separator row 4
+
+    // Table Column Definitions at Row 5
+    sheet.getRow(5).values = [
+      'Dept Code', 'Child Org Code', 'Child Org Name', 'Org Type', 'Org Level', 'Hierarchy Path',
+      'Employee Code', 'Employee Name (EN)', 'Employee Name (TH)', 'Status',
+      'Position Code', 'Position Title', 'Position Status', 'Chart Visibility', 'Visibility Reason',
+      'HR Review Status', 'Expected Dept Code', 'Expected Dept Name', 'Expected Org Unit Code',
+      'Expected Org Unit Name', 'Expected Position Code', 'Expected Position Name',
+      'HR Review Note', 'Reviewed By', 'Reviewed At',
+      'App 53 Record ID', 'App 791 Org ID', 'App 792 Asg ID', 'Data Source Mode'
     ];
 
-    sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
+    sheet.columns = [
+      { key: 'deptCode', width: 14 },
+      { key: 'orgCode', width: 16 },
+      { key: 'orgName', width: 28 },
+      { key: 'orgType', width: 14 },
+      { key: 'orgLevel', width: 10 },
+      { key: 'path', width: 35 },
+      { key: 'empCode', width: 16 },
+      { key: 'empNameEN', width: 26 },
+      { key: 'empNameTH', width: 26 },
+      { key: 'empStatus', width: 12 },
+      { key: 'posCode', width: 16 },
+      { key: 'posTitle', width: 26 },
+      { key: 'posStatus', width: 14 },
+      { key: 'visibility', width: 14 },
+      { key: 'visReason', width: 35 },
+      { key: 'hrStatus', width: 22 },
+      { key: 'expDeptCode', width: 18 },
+      { key: 'expDeptName', width: 26 },
+      { key: 'expOrgCode', width: 20 },
+      { key: 'expOrgName', width: 26 },
+      { key: 'expPosCode', width: 18 },
+      { key: 'expPosName', width: 24 },
+      { key: 'hrNote', width: 35 },
+      { key: 'reviewedBy', width: 16 },
+      { key: 'reviewedAt', width: 20 },
+      { key: 'app53Id', width: 16 },
+      { key: 'app791Id', width: 16 },
+      { key: 'app792Id', width: 16 },
+      { key: 'dataSource', width: 28 }
+    ];
+
+    sheet.getRow(5).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    sheet.getRow(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
 
     // Sort positions by Org Unit Level, then Position Code
     const sortedPositions = [...group.positions].sort((a, b) => {
@@ -389,10 +425,13 @@ export async function runDepartmentAudit() {
 
     const csvRows: string[] = [];
     csvRows.push([
-      'Dept Code', 'Child Org Code', 'Child Org Name', 'Org Type', 'Org Level',
+      'Dept Code', 'Child Org Code', 'Child Org Name', 'Org Type', 'Org Level', 'Hierarchy Path',
       'Employee Code', 'Employee Name EN', 'Employee Name TH', 'Status',
-      'Position Code', 'Position Title', 'Position Status', 'Chart Visibility',
-      'Visibility Source', 'Visibility Reason', 'App 53 Record ID', 'App 791 Org ID', 'App 792 Asg ID', 'Data Source Mode'
+      'Position Code', 'Position Title', 'Position Status', 'Chart Visibility', 'Visibility Reason',
+      'HR Review Status', 'Expected Dept Code', 'Expected Dept Name', 'Expected Org Unit Code',
+      'Expected Org Unit Name', 'Expected Position Code', 'Expected Position Name',
+      'HR Review Note', 'Reviewed By', 'Reviewed At',
+      'App 53 Record ID', 'App 791 Org ID', 'App 792 Asg ID', 'Data Source Mode'
     ].map(v => `"${v}"`).join(','));
 
     sortedPositions.forEach(pos => {
@@ -401,6 +440,7 @@ export async function runDepartmentAudit() {
       const emp = asg ? empMap.get(asg.employeeId) : null;
       const isVacant = pos.lifecycle === 'VACANT' || !emp;
       const res = resolveChartVisibility({ position: pos, orgUnit: org });
+      const { path } = resolveDepartment(pos.orgUnitCode);
 
       const rowData = {
         deptCode: group.deptCode,
@@ -408,6 +448,7 @@ export async function runDepartmentAudit() {
         orgName: org?.name || 'Unknown',
         orgType: org?.type || 'UNKNOWN',
         orgLevel: org?.level || 0,
+        path: path.join(' > '),
         empCode: emp ? emp.employeeCode : (isVacant ? '[VACANT]' : 'Unassigned'),
         empNameEN: emp ? emp.nameEN : (isVacant ? '[VACANT]' : 'Unassigned'),
         empNameTH: emp ? (emp.nameTH || '') : (isVacant ? '[VACANT]' : 'Unassigned'),
@@ -416,21 +457,40 @@ export async function runDepartmentAudit() {
         posTitle: pos.title,
         posStatus: pos.lifecycle,
         visibility: res.visible ? 'SHOW' : 'HIDE',
-        visSource: res.source,
         visReason: res.reason,
+        hrStatus: 'NOT_REVIEWED',
+        expDeptCode: '',
+        expDeptName: '',
+        expOrgCode: '',
+        expOrgName: '',
+        expPosCode: '',
+        expPosName: '',
+        hrNote: '',
+        reviewedBy: '',
+        reviewedAt: '',
         app53Id: emp ? emp.id : 'N/A',
         app791Id: org?.id || 'N/A',
         app792Id: asg ? asg.id : 'N/A',
         dataSource: 'CANONICAL_AUTHENTIC_READONLY'
       };
 
-      sheet.addRow(rowData);
+      const addedRow = sheet.addRow(rowData);
+
+      // Add Data Validation dropdown on HR Review Status cell (Column P)
+      addedRow.getCell(16).dataValidation = {
+        type: 'list',
+        allowBlank: false,
+        formulae: ['"NOT_REVIEWED,CORRECT,WRONG_DEPARTMENT,WRONG_ORG_UNIT,WRONG_POSITION,MISSING_ASSIGNMENT,EXTRA_ASSIGNMENT,MISSING_EMPLOYEE,DUPLICATE,NEED_REVIEW"']
+      };
 
       csvRows.push([
-        rowData.deptCode, rowData.orgCode, rowData.orgName, rowData.orgType, String(rowData.orgLevel),
+        rowData.deptCode, rowData.orgCode, rowData.orgName, rowData.orgType, String(rowData.orgLevel), rowData.path,
         rowData.empCode, rowData.empNameEN, rowData.empNameTH, rowData.empStatus,
-        rowData.posCode, rowData.posTitle, rowData.posStatus, rowData.visibility,
-        rowData.visSource, rowData.visReason, rowData.app53Id, rowData.app791Id, rowData.app792Id, rowData.dataSource
+        rowData.posCode, rowData.posTitle, rowData.posStatus, rowData.visibility, rowData.visReason,
+        rowData.hrStatus, rowData.expDeptCode, rowData.expDeptName, rowData.expOrgCode,
+        rowData.expOrgName, rowData.expPosCode, rowData.expPosName,
+        rowData.hrNote, rowData.reviewedBy, rowData.reviewedAt,
+        rowData.app53Id, rowData.app791Id, rowData.app792Id, rowData.dataSource
       ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
     });
 
@@ -462,78 +522,11 @@ export async function runDepartmentAudit() {
   const excelFilePath = path.join(auditDir, 'OrgFlow_Department_Data_Audit.xlsx');
   await wb.xlsx.writeFile(excelFilePath);
 
-  // === GENERATE 3 MASTER AUDIT CSVs ===
-  // 1. Organization Hierarchy Audit CSV
-  const orgCsvLines = [
-    '"Organization Code","Organization Name","Type","Level","Parent Code","Parent Name","Resolved Department Code","Resolved Department Name","Hierarchy Path","Child Count","Position Count","Employee Count","Audit Result","Issue"'
-  ];
-  orgUnits.forEach(o => {
-    const parent = o.parentCode ? orgMap.get(o.parentCode) : null;
-    const { deptCode, deptName, path } = resolveDepartment(o.code);
-    const childCount = orgUnits.filter(c => c.parentCode === o.code).length;
-    const posCount = positions.filter(p => p.orgUnitCode === o.code).length;
-    const empCount = assignments.filter(a => {
-      const p = posMap.get(a.positionId);
-      return p?.orgUnitCode === o.code;
-    }).length;
-
-    orgCsvLines.push([
-      o.code, o.name, o.type, String(o.level), o.parentCode || '', parent?.name || '',
-      deptCode, deptName, path.join(' > '), String(childCount), String(posCount), String(empCount),
-      'OK', 'None'
-    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
-  });
-  fs.writeFileSync(path.join(auditDir, 'Organization_Hierarchy_Audit.csv'), orgCsvLines.join('\n'), 'utf8');
-
-  // 2. Position Audit CSV
-  const posCsvLines = [
-    '"Position Code","Position Name","Organization Code","Organization Name","Resolved Department","Incumbent Employee Code","Incumbent Name","Vacancy Status","Chart Visibility","Visibility Reason","Audit Result","Issue"'
-  ];
-  positions.forEach(p => {
-    const org = orgMap.get(p.orgUnitCode);
-    const { deptCode } = resolveDepartment(p.orgUnitCode);
-    const asg = asgByPosId.get(p.id);
-    const emp = asg ? empMap.get(asg.employeeId) : null;
-    const isVacant = p.lifecycle === 'VACANT' || !emp;
-    const res = resolveChartVisibility({ position: p, orgUnit: org });
-
-    posCsvLines.push([
-      p.code, p.title, p.orgUnitCode, org?.name || 'Unknown', deptCode,
-      emp ? emp.employeeCode : (isVacant ? '[VACANT]' : 'Unassigned'),
-      emp ? emp.nameEN : (isVacant ? '[VACANT]' : 'Unassigned'),
-      isVacant ? 'VACANT' : 'FILLED',
-      res.visible ? 'SHOW' : 'HIDE',
-      res.reason,
-      'OK', 'None'
-    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
-  });
-  fs.writeFileSync(path.join(auditDir, 'Position_Audit.csv'), posCsvLines.join('\n'), 'utf8');
-
-  // 3. Employee Assignment Audit CSV
-  const empCsvLines = [
-    '"Employee Code","Employee Name (EN)","Employee Name (TH)","Position Code","Position Title","Organization Code","Organization Name","Resolved Department","Assignment Status","Source App","Audit Result","Issue"'
-  ];
-  employees.forEach(e => {
-    const asg = asgByEmpId.get(e.id)?.[0];
-    const pos = asg ? posMap.get(asg.positionId) : null;
-    const org = pos ? orgMap.get(pos.orgUnitCode) : null;
-    const { deptCode } = org ? resolveDepartment(org.code) : { deptCode: 'UNKNOWN' };
-
-    empCsvLines.push([
-      e.employeeCode, e.nameEN, e.nameTH || '', pos?.code || 'NONE', pos?.title || 'NONE',
-      org?.code || 'NONE', org?.name || 'NONE', deptCode,
-      asg?.isPrimary ? 'ACTIVE_PRIMARY' : 'UNASSIGNED',
-      'App 53 / 791 / 792', 'OK', 'None'
-    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
-  });
-  fs.writeFileSync(path.join(auditDir, 'Employee_Assignment_Audit.csv'), empCsvLines.join('\n'), 'utf8');
-
   console.log('=== DEPARTMENT DATA RECONCILIATION AUDIT COMPLETED ===');
   console.log(`Master Excel Workbook: ${excelFilePath}`);
   console.log(`Total Departments Audited: ${deptGroups.size}`);
   console.log(`Total Active Employees Reconciled: ${grandTotalEmployees} / ${employees.length}`);
   console.log(`Total Positions Audited: ${grandTotalPositions} / ${positions.length}`);
-  console.log(`Total Issues Detected: ${issues.length}`);
 }
 
 runDepartmentAudit();

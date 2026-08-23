@@ -266,3 +266,62 @@ export function validateAssignmentHealth(
     isHealthy
   };
 }
+
+export interface DepartmentResolution {
+  deptCode: string;
+  deptName: string;
+  divisionCode: string;
+  path: string[];
+}
+
+export function resolveDepartment(
+  orgCode: string,
+  orgMap: Map<string, OrgUnit>
+): DepartmentResolution {
+  const pathList: string[] = [];
+  let curr = orgMap.get(orgCode);
+  let divisionCode = 'TTMET';
+
+  if (!curr) {
+    return { deptCode: 'UNKNOWN', deptName: 'Unknown Organization', divisionCode: 'UNKNOWN', path: [orgCode] };
+  }
+
+  const visited = new Set<string>();
+  while (curr) {
+    pathList.unshift(`${curr.code} (${curr.name})`);
+    visited.add(curr.code);
+
+    if (curr.level === 3) {
+      // Level 3 is a canonical Department
+      return {
+        deptCode: curr.code,
+        deptName: curr.name,
+        divisionCode: curr.parentCode || 'TTMET',
+        path: pathList
+      };
+    }
+
+    if (curr.level <= 2) {
+      // Level 1 or 2 is Executive / Division Root
+      return {
+        deptCode: curr.code,
+        deptName: curr.name,
+        divisionCode: curr.code,
+        path: pathList
+      };
+    }
+
+    if (!curr.parentCode || visited.has(curr.parentCode)) {
+      break;
+    }
+    curr = orgMap.get(curr.parentCode);
+  }
+
+  return {
+    deptCode: orgCode,
+    deptName: orgMap.get(orgCode)?.name || orgCode,
+    divisionCode,
+    path: pathList
+  };
+}
+

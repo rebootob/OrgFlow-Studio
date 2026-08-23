@@ -15,7 +15,8 @@ import {
   Sparkles,
   AlertTriangle,
   Eye,
-  EyeOff
+  EyeOff,
+  Database
 } from 'lucide-react';
 import { resolveChartVisibility, ChartVisibility } from '@orgflow/domain';
 import { MoveOrgModal } from './MoveOrgModal.js';
@@ -44,7 +45,8 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({ onFocusNode }) => {
     vacatePosition,
     closePosition,
     removeDraftUnit,
-    updatePositionVisibility
+    updatePositionVisibility,
+    navigateToDataReview
   } = useOrgStore();
 
   const [isMoveOrgOpen, setIsMoveOrgOpen] = useState(false);
@@ -259,6 +261,15 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({ onFocusNode }) => {
                   </div>
                 </div>
               )}
+
+              {/* Data Review Link Button */}
+              <button
+                onClick={() => navigateToDataReview(currentOrg.code, 'EMPLOYEES')}
+                className="w-full py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors border border-slate-200"
+              >
+                <Database className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Inspect in Data Review Workspace</span>
+              </button>
 
               {/* Unit Leader Card */}
               {leaderInfo && leaderInfo.position && (

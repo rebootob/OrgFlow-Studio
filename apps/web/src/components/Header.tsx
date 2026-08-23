@@ -7,14 +7,11 @@ import {
   Lock,
   MoreHorizontal,
   ShieldCheck,
-  Calendar,
   Layers,
   Undo2,
   Redo2,
-  PlusCircle,
   FileEdit,
   Eye,
-  CheckCircle2,
   LayoutGrid,
   Network,
   Users,
@@ -35,42 +32,25 @@ export const Header: React.FC<HeaderProps> = ({
   onFocusSelected
 }) => {
   const {
+    activeMainTab,
+    setActiveMainTab,
     viewMode,
     canvasDisplayMode,
     setCanvasDisplayMode,
     draftName,
     sourceSnapshotMeta,
-    createDraft,
     switchToCurrent,
+    switchToDraft,
     selectedOrgCode,
     selectedPositionId,
     undoStack,
     redoStack,
     undo,
-    redo,
-    autosaveStatus,
-    changeOperations
+    redo
   } = useOrgStore();
 
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isHealthModalOpen, setIsHealthModalOpen] = useState(false);
-
-  const lastUpdatedFormatted = sourceSnapshotMeta?.loadedAt
-    ? new Date(sourceSnapshotMeta.loadedAt).toLocaleString('en-GB', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
-    : '23 Aug 2026 13:04';
-
-  const handleCreateDraftClick = () => {
-    const name = window.prompt('Enter Working Draft Plan Name:', 'FY2027 Organization Plan');
-    if (name) {
-      createDraft(name.trim());
-    }
-  };
 
   return (
     <header className="h-14 bg-white border-b border-slate-200 px-6 flex items-center justify-between shadow-xs select-none z-30">
@@ -78,125 +58,139 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2.5">
           <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white shadow-sm transition-colors ${
-            viewMode === 'DRAFT' ? 'bg-indigo-600' : 'bg-emerald-600'
+            activeMainTab === 'DATA_REVIEW' ? 'bg-indigo-600' : viewMode === 'DRAFT' ? 'bg-indigo-600' : 'bg-emerald-600'
           }`}>
-            {viewMode === 'DRAFT' ? <FileEdit className="w-4 h-4" /> : <Building className="w-4 h-4" />}
+            {activeMainTab === 'DATA_REVIEW' ? <Database className="w-4 h-4" /> : viewMode === 'DRAFT' ? <FileEdit className="w-4 h-4" /> : <Building className="w-4 h-4" />}
           </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="font-bold text-sm tracking-tight text-slate-900">OrgFlow Studio</span>
               <span className="text-slate-300">/</span>
               <span className="text-xs font-semibold text-slate-700">
-                {viewMode === 'DRAFT' ? draftName : 'Current Organization'}
+                {activeMainTab === 'DATA_REVIEW' ? 'Data Review Workspace' : viewMode === 'DRAFT' ? draftName : 'Current Organization'}
               </span>
             </div>
           </div>
         </div>
 
         {/* Mode & Data Source Indicator Badges */}
-        {viewMode === 'CURRENT_OFFICIAL' ? (
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-[11px] font-medium">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              <span>Official Kintone Data</span>
-              <span className="text-emerald-400">•</span>
-              <span className="flex items-center gap-0.5 text-emerald-700">
-                <Lock className="w-3 h-3" /> Read Only
-              </span>
-            </div>
-
-            <div
-              className="hidden lg:flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 text-[10px] text-slate-600"
-              title={`Source Provider: ${sourceSnapshotMeta?.sourceProvider || 'Kintone'} | Apps: 53, 791, 792 | Snapshot: ${sourceSnapshotMeta?.snapshotId || 'N/A'}`}
-            >
-              <Database className="w-3 h-3 text-slate-400" />
-              <span className="font-semibold text-slate-700">
-                {sourceSnapshotMeta?.sourceProvider === 'KINTONE_LIVE'
-                  ? 'Kintone Live Read (App 53 / 791 / 792)'
-                  : 'Canonical Master (App 53 / 791 / 792)'}
-              </span>
-            </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-[11px] font-medium">
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>{sourceSnapshotMeta?.sourceProvider === 'KINTONE_LIVE' ? 'Kintone Live Read' : 'Authentic Snapshot'}</span>
+            <span className="text-emerald-400">•</span>
+            <span className="flex items-center gap-0.5 text-emerald-700">
+              <Lock className="w-3 h-3" /> Read Only
+            </span>
           </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-50 border border-indigo-200/80 text-indigo-800 text-[11px] font-medium">
-              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
-              <span>DRAFT WORKSPACE</span>
-              <span className="text-indigo-400">•</span>
-              <span className="text-indigo-600 font-semibold">Not Synced to Kintone</span>
-            </div>
 
-            <div className="flex items-center gap-1 text-[11px] text-slate-400 font-medium px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-md">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-              <span>{autosaveStatus === 'SAVED' ? 'Autosaved' : 'Saving...'}</span>
-              {changeOperations.length > 0 && (
-                <span className="text-indigo-600 font-bold ml-1">({changeOperations.length} changes)</span>
-              )}
-            </div>
+          <div
+            className="hidden lg:flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-slate-100/90 border border-slate-200/80 text-[10px] text-slate-600"
+            title={`Source Provider: ${sourceSnapshotMeta?.sourceProvider || 'Kintone'} | Apps: 53, 791, 792 | Snapshot: ${sourceSnapshotMeta?.snapshotId || 'N/A'}`}
+          >
+            <Database className="w-3 h-3 text-slate-400" />
+            <span className="font-semibold text-slate-700">Apps 53 / 791 / 792</span>
           </div>
-        )}
-
-        {/* Updated Timestamp */}
-        <div className="hidden xl:flex items-center gap-1.5 text-xs text-slate-500 pl-2">
-          <Calendar className="w-3.5 h-3.5 text-slate-400" />
-          <span>Loaded: <strong className="text-slate-700">{lastUpdatedFormatted}</strong></span>
         </div>
       </div>
 
-      {/* Middle: Canvas Display Mode Segment Switcher */}
-      <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">
-        <button
-          onClick={() => setCanvasDisplayMode('OVERVIEW')}
-          className={`px-3 py-1 rounded-lg flex items-center gap-1.5 transition-all ${
-            canvasDisplayMode === 'OVERVIEW'
-              ? 'bg-white text-slate-900 shadow-xs'
-              : 'hover:text-slate-900'
-          }`}
-          title="Overview Mode (Compact high-level metrics)"
-        >
-          <LayoutGrid className="w-3.5 h-3.5 text-slate-500" />
-          <span>Overview</span>
-        </button>
+      {/* Middle: Primary Navigation Tabs */}
+      <div className="flex items-center gap-2">
+        <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">
+          <button
+            onClick={() => {
+              setActiveMainTab('ORGANIZATION');
+              switchToCurrent();
+            }}
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+              activeMainTab === 'ORGANIZATION' && viewMode === 'CURRENT_OFFICIAL'
+                ? 'bg-white text-emerald-900 shadow-xs'
+                : 'hover:text-slate-900'
+            }`}
+            title="Official Current Organization Chart"
+          >
+            <Building className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Current Organization</span>
+          </button>
 
-        <button
-          onClick={() => setCanvasDisplayMode('ORGANIZATION')}
-          className={`px-3 py-1 rounded-lg flex items-center gap-1.5 transition-all ${
-            canvasDisplayMode === 'ORGANIZATION'
-              ? 'bg-white text-emerald-900 shadow-xs'
-              : 'hover:text-slate-900'
-          }`}
-          title="Organization Mode (Default HR View: Head & Summary)"
-        >
-          <Network className="w-3.5 h-3.5 text-emerald-600" />
-          <span>Organization</span>
-        </button>
+          <button
+            onClick={() => {
+              setActiveMainTab('ORGANIZATION');
+              if (viewMode !== 'DRAFT') {
+                switchToDraft();
+              }
+            }}
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+              activeMainTab === 'ORGANIZATION' && viewMode === 'DRAFT'
+                ? 'bg-white text-indigo-900 shadow-xs'
+                : 'hover:text-slate-900'
+            }`}
+            title="Draft Plan & Organization Studio"
+          >
+            <FileEdit className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Organization Studio</span>
+          </button>
 
-        <button
-          onClick={() => setCanvasDisplayMode('PEOPLE')}
-          className={`px-3 py-1 rounded-lg flex items-center gap-1.5 transition-all ${
-            canvasDisplayMode === 'PEOPLE'
-              ? 'bg-white text-indigo-900 shadow-xs'
-              : 'hover:text-slate-900'
-          }`}
-          title="People Mode (Compact Personnel Preview)"
-        >
-          <Users className="w-3.5 h-3.5 text-indigo-600" />
-          <span>People</span>
-        </button>
+          <button
+            onClick={() => setActiveMainTab('DATA_REVIEW')}
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+              activeMainTab === 'DATA_REVIEW'
+                ? 'bg-white text-indigo-900 shadow-xs'
+                : 'hover:text-slate-900'
+            }`}
+            title="Department-by-Department Data Review Workspace"
+          >
+            <Database className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Data Review</span>
+          </button>
+
+          <button
+            onClick={onOpenPrint}
+            className="px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:text-slate-900 transition-all"
+            title="A3 Print Baseline Preview & Export"
+          >
+            <Printer className="w-3.5 h-3.5 text-slate-500" />
+            <span>Print</span>
+          </button>
+        </div>
+
+        {/* Canvas Display Mode Switcher (Visible only when in ORGANIZATION tab) */}
+        {activeMainTab === 'ORGANIZATION' && (
+          <div className="hidden 2xl:flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">
+            <button
+              onClick={() => setCanvasDisplayMode('OVERVIEW')}
+              className={`px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all ${
+                canvasDisplayMode === 'OVERVIEW' ? 'bg-white text-slate-900 shadow-xs' : 'hover:text-slate-900'
+              }`}
+            >
+              <LayoutGrid className="w-3 h-3 text-slate-500" />
+              <span>Overview</span>
+            </button>
+            <button
+              onClick={() => setCanvasDisplayMode('ORGANIZATION')}
+              className={`px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all ${
+                canvasDisplayMode === 'ORGANIZATION' ? 'bg-white text-emerald-900 shadow-xs' : 'hover:text-slate-900'
+              }`}
+            >
+              <Network className="w-3 h-3 text-emerald-600" />
+              <span>Org</span>
+            </button>
+            <button
+              onClick={() => setCanvasDisplayMode('PEOPLE')}
+              className={`px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all ${
+                canvasDisplayMode === 'PEOPLE' ? 'bg-white text-indigo-900 shadow-xs' : 'hover:text-slate-900'
+              }`}
+            >
+              <Users className="w-3 h-3 text-indigo-600" />
+              <span>People</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Right: Primary Actions */}
       <div className="flex items-center gap-2">
-        {/* Toggle Mode: View Current vs Edit Draft */}
-        {viewMode === 'CURRENT_OFFICIAL' ? (
-          <button
-            onClick={handleCreateDraftClick}
-            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-sm transition-colors"
-          >
-            <PlusCircle className="w-3.5 h-3.5" />
-            <span>Create Draft</span>
-          </button>
-        ) : (
+        {viewMode === 'DRAFT' && (
           <div className="flex items-center gap-2">
             <button
               onClick={switchToCurrent}

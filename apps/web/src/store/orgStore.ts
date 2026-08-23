@@ -14,13 +14,24 @@ import {
   computeVersionDiff,
   detectCircularReporting,
   buildNormalizedDataset,
-  ChartVisibility
+  ChartVisibility,
+  ReviewStatus,
+  ReviewRecord
 } from '@orgflow/domain';
 import { CANONICAL_57_MASTER, generate275EmployeesFixture } from '../data/baseline.js';
 
+export type MainNavTab = 'ORGANIZATION' | 'DATA_REVIEW';
 export type CanvasDisplayMode = 'OVERVIEW' | 'ORGANIZATION' | 'PEOPLE';
+export type DataReviewSubTab = 'OVERVIEW' | 'DEPARTMENTS' | 'EMPLOYEES' | 'POSITIONS' | 'ASSIGNMENTS' | 'ISSUES' | 'UNASSIGNED';
 
 export interface OrgStoreState {
+  activeMainTab: MainNavTab;
+  dataReviewSubTab: DataReviewSubTab;
+  dataReviewDeptFilter: string | null;
+  dataReviewStatusFilter: ReviewStatus | 'ALL';
+  selectedReviewRecordId: string | null;
+  reviewRecords: Record<string, ReviewRecord>;
+
   viewMode: 'CURRENT_OFFICIAL' | 'DRAFT';
   canvasDisplayMode: CanvasDisplayMode;
   draftName: string;
@@ -118,12 +129,30 @@ export interface OrgStoreState {
   runValidation: () => void;
   persistDraftToLocalStorage: () => void;
   restoreDraftFromLocalStorage: () => boolean;
+
+  // Data Review Workspace Actions
+  setActiveMainTab: (tab: MainNavTab) => void;
+  setDataReviewSubTab: (subTab: DataReviewSubTab) => void;
+  setDataReviewDeptFilter: (deptCode: string | null) => void;
+  setDataReviewStatusFilter: (status: ReviewStatus | 'ALL') => void;
+  setSelectedReviewRecordId: (id: string | null) => void;
+  updateReviewRecord: (record: ReviewRecord) => void;
+  markRecordCorrect: (id: string, targetType: 'EMPLOYEE' | 'POSITION' | 'ASSIGNMENT') => void;
+  navigateToOrgAndFocus: (orgCode: string, positionId?: string | null) => void;
+  navigateToDataReview: (deptCode?: string | null, subTab?: DataReviewSubTab, targetId?: string | null) => void;
 }
 
 const DRAFT_STORAGE_KEY = 'orgflow_studio_working_draft_v1';
 
 export const useOrgStore = create<OrgStoreState>()(
   immer((set, get) => ({
+    activeMainTab: 'ORGANIZATION',
+    dataReviewSubTab: 'OVERVIEW',
+    dataReviewDeptFilter: null,
+    dataReviewStatusFilter: 'ALL',
+    selectedReviewRecordId: null,
+    reviewRecords: {},
+
     viewMode: 'CURRENT_OFFICIAL',
     canvasDisplayMode: 'ORGANIZATION',
     draftName: 'FY2027 Organization Plan',
@@ -1081,6 +1110,75 @@ export const useOrgStore = create<OrgStoreState>()(
         console.error('[OrgStore] Failed to restore draft from localStorage', err);
         return false;
       }
+    },
+
+    // Data Review Workspace Action Implementations
+    setActiveMainTab: (tab: MainNavTab) => {
+      set(state => {
+        state.activeMainTab = tab;
+      });
+    },
+
+    setDataReviewSubTab: (subTab: DataReviewSubTab) => {
+      set(state => {
+        state.dataReviewSubTab = subTab;
+      });
+    },
+
+    setDataReviewDeptFilter: (deptCode: string | null) => {
+      set(state => {
+        state.dataReviewDeptFilter = deptCode;
+      });
+    },
+
+    setDataReviewStatusFilter: (status: ReviewStatus | 'ALL') => {
+      set(state => {
+        state.dataReviewStatusFilter = status;
+      });
+    },
+
+    setSelectedReviewRecordId: (id: string | null) => {
+      set(state => {
+        state.selectedReviewRecordId = id;
+      });
+    },
+
+    updateReviewRecord: (record: ReviewRecord) => {
+      set(state => {
+        state.reviewRecords[record.id] = {
+          ...record,
+          reviewedAt: record.reviewedAt || new Date().toISOString()
+        };
+      });
+    },
+
+    markRecordCorrect: (id: string, targetType: 'EMPLOYEE' | 'POSITION' | 'ASSIGNMENT') => {
+      set(state => {
+        state.reviewRecords[id] = {
+          id,
+          targetType,
+          status: 'CORRECT',
+          reviewedAt: new Date().toISOString()
+        };
+      });
+    },
+
+    navigateToOrgAndFocus: (orgCode: string, positionId?: string | null) => {
+      set(state => {
+        state.activeMainTab = 'ORGANIZATION';
+        state.currentRootOrgCode = null;
+        state.selectedOrgCode = orgCode;
+        state.selectedPositionId = positionId || null;
+      });
+    },
+
+    navigateToDataReview: (deptCode?: string | null, subTab?: DataReviewSubTab, targetId?: string | null) => {
+      set(state => {
+        state.activeMainTab = 'DATA_REVIEW';
+        if (deptCode !== undefined) state.dataReviewDeptFilter = deptCode;
+        if (subTab) state.dataReviewSubTab = subTab;
+        if (targetId !== undefined) state.selectedReviewRecordId = targetId;
+      });
     }
   }))
 );
